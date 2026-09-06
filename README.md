@@ -6,7 +6,20 @@ A local marketplace where verified growers, bakers and producers list what they 
 
 ## Status
 
-Pre-build. Planning documents only, no application code yet.
+Buyer and seller flows are built. Static HTML with Firebase Auth, Firestore and
+Storage, no build step, the same shape as RentEvent.
+
+Firebase project `market-day-261be` is live, with Email/Password auth and
+Firestore already switched on. The config is in `firebase.js`.
+
+**Two things still outstanding:**
+
+1. **Publish `firestore.rules`.** Firestore console, Rules tab, paste the file,
+   Publish. Until then the database is closed to everyone, which is safe but
+   means nothing works.
+2. **Cloud Storage needs the Blaze plan.** It is the only paid piece, it stores
+   seller documents and photos, and until it is on, uploads fail with a clear
+   message while the rest of the site works.
 
 ## What version 1 is
 

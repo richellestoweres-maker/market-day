@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add a listing &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="seller-dashboard.html" class="back-link">&larr;</a>
+  <div class="topbar-center">
+    <div class="eyebrow">Sellers</div>
+    <h1 class="page-title">Add a listing</h1>
+  </div>
+</header>
+
+<main class="wrap narrow">
+  <div id="loading" class="spinner">Loading&hellip;</div>
+
+  <form id="form" hidden>
+    <div class="card">
+      <div class="field">
+        <label class="lab" for="category">What is it</label>
+        <select id="category" required><option value="">Choose a category</option></select>
+        <div class="hint" id="catHint"></div>
+      </div>
+      <div class="field">
+        <label class="lab" for="title">Name it</label>
+        <input id="title" type="text" required maxlength="80" placeholder="Sourdough boule">
+      </div>
+      <div class="field">
+        <label class="lab" for="description">Tell them about it</label>
+        <textarea id="description" maxlength="500" placeholder="Baked Friday night, long fermented, crackly crust."></textarea>
+      </div>
+      <div class="field">
+        <label class="lab" for="photo">Photo</label>
+        <div class="hint">Your photo of this actual item. Not a picture from the internet, and not last season's.</div>
+        <input id="photo" type="file" accept="image/*" required>
+        <img id="photoPreview" alt="" hidden style="margin-top:10px;width:100%;max-height:230px;object-fit:cover;border-radius:14px">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="two-up">
+        <div class="field">
+          <label class="lab" for="price">Price</label>
+          <input id="price" type="number" min="0" step="0.25" required placeholder="7.00">
+        </div>
+        <div class="field">
+          <label class="lab" for="unit">Per</label>
+          <input id="unit" type="text" required maxlength="20" placeholder="loaf">
+        </div>
+      </div>
+      <div class="field">
+        <label class="lab" for="quantity">How many will you have</label>
+        <div class="hint">Buyers can only reserve up to this. Better to under promise.</div>
+        <input id="quantity" type="number" min="0" step="1" required placeholder="12">
+      </div>
+    </div>
+
+    <div class="card" id="labelCard" hidden>
+      <h3>The label</h3>
+      <p class="hint">Home kitchen foods need this on the package and on this page before
+      anyone can buy. We fill in what we can and print it for you.</p>
+      <div class="field">
+        <label class="lab" for="regNumber">Your registration number</label>
+        <input id="regNumber" type="text" maxlength="40" placeholder="If you have one">
+      </div>
+      <div class="field">
+        <label class="lab">Allergens</label>
+        <div class="hint">Anything in this that is one of the major allergens.</div>
+        <div class="chips" id="allergens"></div>
+      </div>
+      <div class="field">
+        <label class="lab">Preview</label>
+        <div class="label-preview" id="labelPreview"></div>
+      </div>
+      <button class="btn ghost sm" type="button" id="printLabel">Print this label</button>
+    </div>
+
+    <div class="card">
+      <h3>How buyers get it</h3>
+      <p class="hint" id="fulfilHint"></p>
+      <div class="tiles" id="fulfillment"></div>
+    </div>
+
+    <div class="notice bad" id="blocked" hidden></div>
+    <button class="btn block" id="submit" type="submit">Publish listing</button>
+    <p class="muted small center">You can hide it again any time from your listings.</p>
+  </form>
+</main>
+
+<script type="module">
+import { db, storage, storageReady } from "./firebase.js";
+import { requireSession, toast } from "./session.js";
+import { CATEGORIES, FULFILLMENT, COMMON_ALLERGENS, REQUIRED_LABEL_STATEMENT,
+         unlockedCategories, canPublish, requiresAttendedHandoff, allowedDriverTypes }
+  from "./catalog.js";
+import { collection, addDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { ref, uploadBytes, getDownloadURL }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-storage.js";
+
+const { user, seller, verifications } = await requireSession({ require: "seller" });
+const unlocked = unlockedCategories(verifications);
+
+if (!unlocked.length) {
+  document.getElementById("loading").outerHTML = `<div class="notice warn">
+    <strong>Nothing is unlocked yet.</strong> Once a document is approved you can list
+    in the categories it covers. <a href="verification.html">See what is missing</a>.</div>`;
+} else {
+  buildForm();
+}
+
+function buildForm() {
+  // Only categories they have actually earned. The rules reject the rest anyway,
+  // but a form that offers something it will refuse is a bad form.
+  const select = document.getElementById("category");
+  unlocked.forEach(key => {
+    const o = document.createElement("option");
+    o.value = key; o.textContent = CATEGORIES[key].label;
+    select.appendChild(o);
+  });
+
+  const chosen = new Set();
+  const allergens = new Set();
+
+  // fulfillment options the seller has actually switched on
+  const enabled = Object.entries(seller.fulfillment || {})
+    .filter(([, v]) => v?.enabled).map(([k]) => k);
+
+  document.getElementById("fulfilHint").textContent = enabled.length
+    ? "Pick the ways this particular item can be collected."
+    : "You have not set up any pickup options yet. Do that first on your dashboard.";
+
+  const fBox = document.getElementById("fulfillment");
+  enabled.forEach(key => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "tile"; b.setAttribute("aria-pressed", "true");
+    chosen.add(key);
+    b.innerHTML = `<span class="t-label">${FULFILLMENT[key].label}</span>
+      <span class="t-blurb">${FULFILLMENT[key].who}</span>`;
+    b.onclick = () => {
+      chosen.has(key) ? chosen.delete(key) : chosen.add(key);
+      b.setAttribute("aria-pressed", chosen.has(key));
+    };
+    fBox.appendChild(b);
+  });
+
+  // allergen chips
+  const aBox = document.getElementById("allergens");
+  COMMON_ALLERGENS.forEach(a => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = a;
+    b.onclick = () => {
+      allergens.has(a) ? allergens.delete(a) : allergens.add(a);
+      b.setAttribute("aria-pressed", allergens.has(a));
+      drawLabel();
+    };
+    aBox.appendChild(b);
+  });
+
+  select.addEventListener("change", () => {
+    const cat = CATEGORIES[select.value];
+    document.getElementById("labelCard").hidden = !cat?.cottage;
+    document.getElementById("catHint").textContent = cat && requiresAttendedHandoff(select.value)
+      ? "This needs to stay cold, so it has to be handed over in person. No leaving it on a porch."
+      : "";
+    drawLabel();
+  });
+
+  ["title", "regNumber"].forEach(id =>
+    document.getElementById(id).addEventListener("input", drawLabel));
+
+  document.getElementById("photo").addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    photoPreview.src = URL.createObjectURL(file);
+    photoPreview.hidden = false;
+  });
+
+  function drawLabel() {
+    document.getElementById("labelPreview").textContent = [
+      (title.value || "PRODUCT NAME").toUpperCase(),
+      `${seller.displayName}${regNumber.value ? "  ·  reg. " + regNumber.value : ""}`,
+      allergens.size ? "Contains: " + [...allergens].join(", ").toUpperCase() : "Contains: none declared",
+      "Made " + new Date().toISOString().slice(0, 10),
+      "",
+      REQUIRED_LABEL_STATEMENT
+    ].join("\n");
+  }
+  drawLabel();
+
+  document.getElementById("printLabel").onclick = () => {
+    const w = window.open("", "_blank", "width=420,height=520");
+    w.document.write(`<pre style="font:12px/1.7 ui-monospace,Menlo,monospace;padding:24px">${
+      document.getElementById("labelPreview").textContent}</pre>`);
+    w.document.close(); w.print();
+  };
+
+  document.getElementById("form").addEventListener("submit", publish);
+  document.getElementById("loading").hidden = true;
+  document.getElementById("form").hidden = false;
+
+  async function publish(e) {
+    e.preventDefault();
+    const btn = document.getElementById("submit");
+    const blocked = document.getElementById("blocked");
+    blocked.hidden = true;
+
+    const draft = {
+      sellerId: user.uid,
+      title: title.value.trim(),
+      description: description.value.trim(),
+      category: select.value,
+      price: Number(price.value),
+      unit: unit.value.trim(),
+      quantityAvailable: Number(quantity.value),
+      temperatureControlled: requiresAttendedHandoff(select.value),
+      allowUnattended: false,
+      allowedFulfillment: [...chosen],
+      driverType: allowedDriverTypes(seller.verifiedTypes || [])[0],
+      label: CATEGORIES[select.value]?.cottage ? {
+        productName: title.value.trim(),
+        businessName: seller.displayName,
+        registrationNumber: regNumber.value.trim() || "not registered",
+        allergens: [...allergens],
+        statement: REQUIRED_LABEL_STATEMENT
+      } : null
+    };
+
+    // Same gate the security rules apply, run here so the message is readable.
+    const check = canPublish(draft, verifications, seller.verifiedTypes || []);
+    if (!check.ok) {
+      blocked.innerHTML = `<strong>Not quite ready.</strong><ul>${
+        check.problems.map(p => `<li>${p}</li>`).join("")}</ul>`;
+      blocked.hidden = false;
+      return blocked.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    if (!chosen.size) return toast("Pick at least one way buyers can collect this.");
+
+    btn.disabled = true;
+    btn.textContent = "Publishing…";
+
+    try {
+    if (!storageReady()) {
+      toast("Photo uploads are not switched on yet. Ask Market Day support.");
+      btn.disabled = false;
+      return;
+    }
+      const file = document.getElementById("photo").files[0];
+      const path = `listings/${user.uid}/${Date.now()}-${file.name}`;
+      await uploadBytes(ref(storage, path), file);
+      draft.photoUrl = await getDownloadURL(ref(storage, path));
+
+      await addDoc(collection(db, "listings"), {
+        ...draft, status: "published", createdAt: serverTimestamp()
+      });
+      location.href = "my-listings.html";
+    } catch (err) {
+      console.error(err);
+      toast("Could not publish that. Try again.");
+      btn.disabled = false;
+      btn.textContent = "Publish listing";
+    }
+  }
+}
+</script>
+</body>
+</html>

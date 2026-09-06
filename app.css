@@ -421,3 +421,78 @@ input:focus, select:focus, textarea:focus,
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* explore ----------------------------------------------------------------- */
+.explore-head { display: flex; align-items: center; justify-content: space-between;
+  gap: 14px; padding-top: 26px; }
+.page-title.big { font-family: var(--display); font-weight: 700;
+  font-size: clamp(1.7rem, 4.5vw, 2.2rem); margin: 0; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+  font-weight: 600; padding: 7px 14px; border-radius: var(--r-pill);
+  background: var(--bg-deep); color: var(--text); text-decoration: none; }
+.pill svg { width: 14px; height: 14px; }
+.pill:hover { background: var(--line); }
+
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
+.chip { font: inherit; font-size: 13px; font-weight: 600; padding: 7px 14px;
+  border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--card);
+  color: var(--text); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.chip:hover { border-color: var(--green); }
+.chip span { color: var(--muted); font-size: 10px; }
+
+/* farm profile ------------------------------------------------------------ */
+.cover { height: 220px; position: relative; background-color: var(--bg-deep);
+  background-size: cover; background-position: center; }
+.cover .round { position: absolute; top: 16px; left: 16px; width: 34px; height: 34px;
+  border-radius: 50%; border: none; cursor: pointer; background: rgba(255,255,255,.94);
+  color: var(--text); font-size: 16px; line-height: 1; }
+.farm-name { margin-top: 18px; }
+.s-h2 { font-family: var(--display); font-weight: 700; font-size: 24px; margin: 0 0 2px; }
+
+.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin: 16px 0; }
+.tab { font: inherit; font-size: 14px; font-weight: 600; background: none; border: none;
+  cursor: pointer; color: var(--muted); padding: 0 0 9px;
+  border-bottom: 2px solid transparent; }
+.tab[aria-current="page"] { color: var(--text); border-color: var(--brick); }
+
+.label-note { font-size: 11px; color: var(--muted); line-height: 1.35; }
+
+/* basket lines ------------------------------------------------------------ */
+.line { display: flex; align-items: center; gap: 13px; padding: 13px 0;
+  border-bottom: 1px solid var(--line-soft); }
+.line:last-of-type { border-bottom: none; }
+.line .thumb.sq { width: 56px; height: 56px; border-radius: 11px; flex: none;
+  background-color: var(--bg-deep); background-size: cover; background-position: center; }
+.line .meta { flex: 1; min-width: 0; }
+.line .fname { font-weight: 700; font-size: 14.5px; display: block; }
+.line .fsub { color: var(--muted); font-size: 12.5px; display: block; }
+.line .price { font-size: 14px; font-weight: 700; display: block; margin-top: 2px; }
+
+/* pickup panel ------------------------------------------------------------ */
+.panel.row { display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px;
+  margin: 16px 0 14px; border-radius: var(--r); }
+.panel.row .p-icon { width: 34px; height: 34px; flex: none; border-radius: 50%;
+  background: var(--card); display: grid; place-items: center; color: var(--green); }
+.panel.row .p-icon svg { width: 17px; height: 17px; }
+.panel.row strong { display: block; font-size: 15px; margin-bottom: 3px; }
+.panel.row .muted { display: block; }
+
+/* tabbar badge ------------------------------------------------------------ */
+.tabbar .dot { top: 2px; right: 50%; margin-right: -22px; }
+
+/* auth and confirmation --------------------------------------------------- */
+.auth { padding-top: 34px; max-width: 460px; }
+.auth .card { margin-top: 18px; }
+.code-card { text-align: center; font-family: var(--display); font-weight: 700;
+  font-size: 40px; letter-spacing: .1em; padding: 28px 20px; }
+
+/* two up form row --------------------------------------------------------- */
+.two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.chip[aria-pressed="true"] { background: var(--green-soft); border-color: var(--green);
+  color: var(--green); }
+
+/* story ------------------------------------------------------------------- */
+.story { padding-top: 30px; }
+.story .lead { font-size: 17.5px; color: var(--muted); margin-bottom: 8px; }
+.story p { max-width: 62ch; }
+.big-script { font-size: 30px; color: var(--green); margin: 26px 0 18px; }

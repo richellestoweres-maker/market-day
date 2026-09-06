@@ -67,7 +67,7 @@ import { requireSession, toast } from "./session.js";
 import { SELLER_TYPES } from "./catalog.js";
 import { doc, setDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
-import { storage } from "./firebase.js";
+import { storage, storageReady } from "./firebase.js";
 import { ref, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-storage.js";
 
@@ -124,6 +124,11 @@ document.getElementById("form").addEventListener("submit", async e => {
   btn.disabled = true;
 
   try {
+  if (!storageReady()) {
+    toast("Photo uploads are not switched on yet. Ask Market Day support.");
+    btn.disabled = false;
+    return;
+    }
     // Their own photo of their own place. Platform art is only ever used on the
     // category circles and the hero, never to stand in for a seller.
     let coverPhotoUrl = seller?.coverPhotoUrl || null;

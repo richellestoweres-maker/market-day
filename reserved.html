@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reserved &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main class="wrap narrow auth center">
+  <h1 class="page-title big">You&rsquo;re all set</h1>
+  <p class="muted">Show this code when you collect.</p>
+  <div class="card code-card"><span id="code">&mdash;</span></div>
+  <p class="small muted">Each farm hands over their own order and takes payment then.
+  Nothing has been charged here.</p>
+  <a class="btn block" href="orders.html">See your pickups</a>
+  <p class="center small"><a href="explore.html">Keep browsing</a></p>
+</main>
+
+<script type="module">
+import { renderChrome } from "./chrome.js";
+renderChrome();
+const code = new URLSearchParams(location.search).get("code");
+document.getElementById("code").textContent = code || "—";
+</script>
+</body>
+</html>

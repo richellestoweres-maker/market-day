@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log in &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main class="wrap narrow auth">
+  <h1 class="page-title big">Welcome back</h1>
+  <p class="muted">Log in to reserve from your local farms.</p>
+  <form class="card" id="form">
+    <div class="field">
+      <label class="lab" for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" required>
+    </div>
+    <div class="field">
+      <label class="lab" for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+    </div>
+    <div class="notice bad small" id="error" hidden></div>
+    <button class="btn block" id="submit" type="submit">Log in</button>
+  </form>
+  <p class="center small">New here? <a href="create-account.html">Create an account</a></p>
+</main>
+
+<script type="module">
+// Its own module on purpose. If the Firebase SDK fails to load, blocked by
+// an ad blocker or a slow CDN, the page still has working navigation.
+import { renderChrome } from "./chrome.js";
+renderChrome();
+</script>
+
+<script type="module">
+import { auth } from "./firebase.js";
+
+import { signInWithEmailAndPassword }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+
+document.getElementById("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = document.getElementById("submit");
+  const err = document.getElementById("error");
+  btn.disabled = true; err.hidden = true;
+
+  try {
+    await signInWithEmailAndPassword(auth, email.value.trim(), password.value);
+    location.href = sessionStorage.getItem("marketday.after_login") || "index.html";
+  } catch (ex) {
+    // Never say which half was wrong, that tells someone whether an email exists.
+    err.textContent = "That email and password do not match. Try again.";
+    err.hidden = false;
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

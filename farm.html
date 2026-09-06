@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Farm &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<main id="page"><div class="spinner">Loading&hellip;</div></main>
+
+<script type="module">
+// Its own module on purpose. If the Firebase SDK fails to load, blocked by
+// an ad blocker or a slow CDN, the page still has working navigation.
+import { renderChrome } from "./chrome.js";
+renderChrome({ active: "explore" });
+</script>
+
+<script type="module">
+import { db } from "./firebase.js";
+import { money, escapeHtml } from "./chrome.js";
+import { add, paintBadge } from "./basket.js";
+import { CATEGORIES, FULFILLMENT, REQUIRED_LABEL_STATEMENT } from "./catalog.js";
+import { doc, getDoc, collection, query, where, getDocs }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+const id = new URLSearchParams(location.search).get("id");
+const page = document.getElementById("page");
+
+if (!id) {
+  page.innerHTML = `<div class="wrap narrow"><div class="empty">No farm chosen. <a href="explore.html">Browse farms</a>.</div></div>`;
+} else {
+  try {
+    const snap = await getDoc(doc(db, "sellers", id));
+    if (!snap.exists()) throw new Error("not found");
+    const farm = { id, ...snap.data() };
+
+    const listings = (await getDocs(query(collection(db, "listings"),
+      where("sellerId", "==", id), where("status", "==", "published"))))
+      .docs.map(d => ({ id: d.id, ...d.data() }));
+
+    render(farm, listings);
+  } catch (err) {
+    console.error(err);
+    page.innerHTML = `<div class="wrap narrow"><div class="empty">We could not find that farm. <a href="explore.html">Browse farms</a>.</div></div>`;
+  }
+}
+
+function render(farm, listings) {
+  const pickup = Object.entries(farm.fulfillment || {})
+    .filter(([, v]) => v?.enabled)
+    .map(([k]) => FULFILLMENT[k]?.label).filter(Boolean);
+
+  page.innerHTML = `
+    <div class="cover" style="background-image:url(${escapeHtml(farm.coverPhotoUrl || "")})">
+      <button class="round" id="back" aria-label="Back">&larr;</button>
+    </div>
+
+    <div class="wrap narrow">
+      <h1 class="s-h2 farm-name">${escapeHtml(farm.displayName)}</h1>
+      <p class="fsub">${escapeHtml(farm.town || "")}</p>
+      <p class="stars">${farm.ratingCount
+        ? `&#9733; ${farm.rating?.toFixed(1)} <span class="muted">(${farm.ratingCount} reviews)</span> `
+        : `<span class="muted small">No reviews yet</span> `}<span class="badge ok">Verified</span></p>
+
+      <div class="tabs" id="tabs">
+        <button class="tab" data-tab="about" aria-current="page">About</button>
+        <button class="tab" data-tab="products">Products</button>
+        <button class="tab" data-tab="pickup">Pickup</button>
+      </div>
+
+      <section data-panel="about">
+        <p class="small muted">${escapeHtml(farm.bio || "This farm has not written an introduction yet.")}</p>
+        <p class="muted small">Selling: ${escapeHtml((farm.unlockedCategories || [])
+          .map(c => CATEGORIES[c]?.label).filter(Boolean).join(", ") || "nothing yet")}</p>
+        <div class="notice good small">
+          <strong>Verified by Market Day.</strong> Every category above is backed by a
+          document we checked, and it closes automatically if that document lapses.
+        </div>
+      </section>
+
+      <section data-panel="products" hidden>
+        ${listings.length ? `<div class="grid" id="grid">${listings.map(card).join("")}</div>`
+          : `<div class="empty">Nothing listed for this week yet.</div>`}
+      </section>
+
+      <section data-panel="pickup" hidden>
+        ${pickup.length ? `<div class="card">${Object.entries(farm.fulfillment || {})
+          .filter(([, v]) => v?.enabled).map(([k, v]) => `
+          <div class="card-row"><div class="grow">
+            <h3>${FULFILLMENT[k].label}</h3>
+            <div class="muted small">${escapeHtml(pickupDetail(k, v.config || {}))}</div>
+          </div></div>`).join("")}</div>`
+          : `<div class="empty">This farm has not set up pickup yet.</div>`}
+        <p class="muted small">You pay ${escapeHtml(farm.displayName)} directly when you collect. Market Day never handles your money.</p>
+      </section>
+    </div>`;
+
+  document.getElementById("back").onclick = () => history.back();
+
+  document.getElementById("tabs").addEventListener("click", e => {
+    const tab = e.target.closest(".tab");
+    if (!tab) return;
+    document.querySelectorAll(".tab").forEach(t => t.removeAttribute("aria-current"));
+    tab.setAttribute("aria-current", "page");
+    document.querySelectorAll("[data-panel]").forEach(p => {
+      p.hidden = p.dataset.panel !== tab.dataset.tab;
+    });
+  });
+
+  document.getElementById("grid")?.addEventListener("click", e => {
+    const btn = e.target.closest(".add");
+    if (!btn) return;
+    e.preventDefault();
+    add(listings.find(l => l.id === btn.dataset.listing), farm);
+    paintBadge();
+    btn.textContent = "✓";
+    setTimeout(() => (btn.textContent = "+"), 1200);
+  });
+
+  // deep link from the home page straight to one item
+  if (location.hash) {
+    document.querySelector('[data-tab="products"]')?.click();
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "center" });
+  }
+}
+
+function card(l) {
+  const cottage = CATEGORIES[l.category]?.cottage;
+  const left = l.quantityAvailable;
+  return `<a class="product" id="${l.id}" href="#${l.id}">
+    <span class="thumb" style="background-image:url(${escapeHtml(l.photoUrl)})"></span>
+    <span class="body">
+      <span class="name">${escapeHtml(l.title)}</span>
+      ${left <= 3 ? `<span class="farm">${left > 0 ? `Only ${left} left` : "Sold out"}</span>` : ""}
+      ${cottage ? `<span class="label-note" title="${escapeHtml(REQUIRED_LABEL_STATEMENT)}">
+        Made in a home kitchen${l.label?.allergens?.length
+          ? `, contains ${escapeHtml(l.label.allergens.join(", ").toLowerCase())}` : ""}</span>` : ""}
+      <span class="foot">
+        <span class="price">${money(l.price)} <span>${escapeHtml(l.unit || "")}</span></span>
+        <button class="add" data-listing="${l.id}" ${left > 0 ? "" : "disabled"}
+          aria-label="Add ${escapeHtml(l.title)} to basket">+</button>
+      </span>
+    </span></a>`;
+}
+
+function pickupDetail(method, c) {
+  switch (method) {
+    case "market_pickup":
+      return [c.marketName, c.days?.join(", "), c.booth && `booth ${c.booth}`]
+        .filter(Boolean).join(" &middot; ") || "At the market";
+    case "store_pickup":
+      return [c.address, c.hours].filter(Boolean).join(" &middot; ") || "At the shop";
+    case "porch_pickup":
+      return [c.windowStart && `${c.windowStart} to ${c.windowEnd}`,
+        c.addressVisibleBeforeReservation ? c.address : "Address shared once you reserve"]
+        .filter(Boolean).join(" &middot; ");
+    case "drop_off":
+      return [c.zipCodes?.length ? `Delivers to ${c.zipCodes.join(", ")}` : c.radiusMiles && `Within ${c.radiusMiles} miles`,
+        c.fee ? `${"$" + c.fee} fee` : "No fee",
+        c.freeOver && `free over $${c.freeOver}`].filter(Boolean).join(" &middot; ");
+    default: return "";
+  }
+}
+</script>
+</body>
+</html>

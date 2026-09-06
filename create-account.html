@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create an account &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main class="wrap narrow auth">
+  <h1 class="page-title big">Create your account</h1>
+  <p class="muted">Free, and always free for buyers.</p>
+  <form class="card" id="form">
+    <div class="field">
+      <label class="lab" for="name">Your name</label>
+      <input id="name" type="text" autocomplete="name" required maxlength="60">
+    </div>
+    <div class="field">
+      <label class="lab" for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" required>
+    </div>
+    <div class="field">
+      <label class="lab" for="password">Password</label>
+      <div class="hint">At least 8 characters.</div>
+      <input id="password" type="password" autocomplete="new-password" required minlength="8">
+    </div>
+    <div class="notice bad small" id="error" hidden></div>
+    <button class="btn block" id="submit" type="submit">Create account</button>
+  </form>
+  <p class="center small">Selling instead? <a href="seller-setup.html">Start a farm profile</a></p>
+</main>
+
+<script type="module">
+// Its own module on purpose. If the Firebase SDK fails to load, blocked by
+// an ad blocker or a slow CDN, the page still has working navigation.
+import { renderChrome } from "./chrome.js";
+renderChrome();
+</script>
+
+<script type="module">
+import { auth, db } from "./firebase.js";
+
+import { createUserWithEmailAndPassword }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+import { doc, setDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+document.getElementById("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = document.getElementById("submit");
+  const err = document.getElementById("error");
+  btn.disabled = true; err.hidden = true;
+
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email.value.trim(), password.value);
+    // role and suspended are fixed at creation. The rules stop anyone editing
+    // their own role later, which is what keeps admin meaningful.
+    await setDoc(doc(db, "users", cred.user.uid), {
+      name: name.value.trim(),
+      email: email.value.trim(),
+      role: "member",
+      suspended: false,
+      createdAt: serverTimestamp()
+    });
+    location.href = sessionStorage.getItem("marketday.after_login") || "index.html";
+  } catch (ex) {
+    err.textContent = ex.code === "auth/email-already-in-use"
+      ? "There is already an account with that email. Try logging in."
+      : "Could not create that account. Check the email and try again.";
+    err.hidden = false;
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

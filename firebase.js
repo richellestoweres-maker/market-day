@@ -16,15 +16,34 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/12.12.1/firebas
 import { getStorage } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-storage.js";
 
 const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY",
-  authDomain: "market-day-xxxxx.firebaseapp.com",
-  projectId: "market-day-xxxxx",
-  storageBucket: "market-day-xxxxx.firebasestorage.app",
-  messagingSenderId: "PASTE_SENDER_ID",
-  appId: "PASTE_APP_ID"
+  apiKey: "AIzaSyDaZo5IidNFidn0Fd5e6jBX1S7zpxfe7A0",
+  authDomain: "market-day-261be.firebaseapp.com",
+  projectId: "market-day-261be",
+  storageBucket: "market-day-261be.firebasestorage.app",
+  messagingSenderId: "43577439064",
+  appId: "1:43577439064:web:839d2c13c74cad72496b2d"
 };
+
+if (firebaseConfig.apiKey.startsWith("PASTE_")) {
+  // Loud on purpose. A half configured app fails in confusing ways later.
+  console.error("Firebase is not configured yet. See the setup steps at the top of firebase.js.");
+  document.addEventListener("DOMContentLoaded", () => {
+    document.body.insertAdjacentHTML("afterbegin",
+      `<div class="notice bad" style="margin:12px">Firebase is not configured yet.
+       Paste your project config into firebase.js.</div>`);
+  });
+}
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+// Cloud Storage needs the Blaze plan. Until that is switched on, photo uploads
+// are the only thing that will not work, and they fail with a clear message
+// rather than taking the page down with them.
+export let storage = null;
+try {
+  storage = getStorage(app);
+} catch (err) {
+  console.warn("Cloud Storage is not enabled on this project yet.", err);
+}
+export const storageReady = () => storage !== null;

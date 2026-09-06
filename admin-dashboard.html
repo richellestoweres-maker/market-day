@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="index.html" class="back-link">&larr;</a>
+  <div class="topbar-center"><div class="eyebrow">Admin</div><h1 class="page-title">Market Day</h1></div>
+</header>
+<main class="wrap narrow"><div id="body"><div class="spinner">Loading&hellip;</div></div></main>
+
+<script type="module">
+import { db } from "./firebase.js";
+import { requireSession, fmtDate } from "./session.js";
+import { DOC_TYPES } from "./catalog.js";
+import { collection, query, where, getDocs }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+await requireSession({ require: "admin" });
+
+const [pending, sellers, expiring] = await Promise.all([
+  getDocs(query(collection(db, "verifications"), where("status", "==", "pending"))),
+  getDocs(query(collection(db, "sellers"), where("status", "==", "verified"))),
+  getDocs(query(collection(db, "verifications"), where("status", "==", "approved")))
+]);
+
+const soon = expiring.docs.map(d => d.data()).filter(d => {
+  if (!d.expiresOn) return false;
+  const days = (new Date(d.expiresOn) - Date.now()) / 86400000;
+  return days > 0 && days <= 30;
+});
+
+document.getElementById("body").innerHTML = `
+  <div class="card">
+    <div class="card-row"><div class="grow"><h3>Waiting for review</h3>
+      <div class="muted small">${pending.size} document${pending.size === 1 ? "" : "s"} in the queue.</div></div>
+      <a class="btn sm" href="admin-verifications.html">Review</a></div>
+    <div class="card-row"><div class="grow"><h3>Verified farms</h3>
+      <div class="muted small">${sellers.size} selling right now.</div></div></div>
+    <div class="card-row"><div class="grow"><h3>Expiring within a month</h3>
+      <div class="muted small">${soon.length
+        ? soon.map(d => DOC_TYPES[d.docType]?.label + " on " + fmtDate(d.expiresOn)).join(", ")
+        : "Nothing lapsing soon."}</div></div></div>
+  </div>
+  <p class="muted small">Approving a document recomputes that seller's categories from scratch,
+  so an expired certificate closes them on its own. Nothing to undo by hand.</p>`;
+</script>
+</body>
+</html>

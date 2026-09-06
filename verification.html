@@ -60,7 +60,7 @@
 </main>
 
 <script type="module">
-import { db, storage } from "./firebase.js";
+import { db, storage, storageReady } from "./firebase.js";
 import { requireSession, toast, fmtDate } from "./session.js";
 import { DOC_TYPES, CATEGORIES, BLOCKED_CATEGORIES, unlockedCategories, missingFor, expiringSoon }
   from "./catalog.js";
@@ -167,6 +167,11 @@ document.getElementById("upload").addEventListener("submit", async e => {
   btn.textContent = "Sending…";
 
   try {
+  if (!storageReady()) {
+    toast("Photo uploads are not switched on yet. Ask Market Day support.");
+    btn.disabled = false;
+    return;
+    }
     const path = `verifications/${user.uid}/${Date.now()}-${file.name}`;
     await uploadBytes(ref(storage, path), file);
     const url = await getDownloadURL(ref(storage, path));

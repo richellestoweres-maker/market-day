@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explore &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<main class="wrap narrow">
+  <div class="explore-head">
+    <h1 class="page-title big">Explore</h1>
+    <a class="pill" href="#" id="mapToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Map</a>
+  </div>
+
+  <form class="searchbar" id="search">
+    <input type="text" name="q" id="q" placeholder="Search by farm, product or location" aria-label="Search">
+  </form>
+
+  <div class="chips" id="chips">
+    <button class="chip" data-filter="category" type="button">Product <span>&#9662;</span></button>
+    <button class="chip" data-filter="fulfillment" type="button">Pickup <span>&#9662;</span></button>
+    <button class="chip" data-filter="clear" type="button" hidden>Clear</button>
+  </div>
+
+  <div id="filterPanel" hidden></div>
+
+  <p class="muted small" id="summary"></p>
+  <div id="results"><div class="spinner">Loading&hellip;</div></div>
+</main>
+
+<script type="module">
+// Its own module on purpose. If the Firebase SDK fails to load, blocked by
+// an ad blocker or a slow CDN, the page still has working navigation.
+import { renderChrome } from "./chrome.js";
+renderChrome({ active: "explore" });
+</script>
+
+<script type="module">
+import { db } from "./firebase.js";
+import { escapeHtml } from "./chrome.js";
+import { CATEGORIES, FULFILLMENT } from "./catalog.js";
+import { collection, query, where, getDocs }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+const params = new URLSearchParams(location.search);
+const state = {
+  q: params.get("q") || "",
+  category: params.get("category") || "",
+  fulfillment: params.get("fulfillment") || ""
+};
+document.getElementById("q").value = state.q;
+
+let farms = [];
+try {
+  const snap = await getDocs(query(collection(db, "sellers"), where("status", "==", "verified")));
+  farms = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+} catch (err) {
+  console.error(err);
+  document.getElementById("results").innerHTML =
+    `<div class="empty">Could not load farms just now. Refresh to try again.</div>`;
+}
+
+// --- filters --------------------------------------------------------------
+const PANELS = {
+  category: () => Object.entries(CATEGORIES).map(([k, c]) =>
+    `<button class="chip" data-set="category" data-value="${k}">${c.label}</button>`).join(""),
+  fulfillment: () => Object.entries(FULFILLMENT).map(([k, f]) =>
+    `<button class="chip" data-set="fulfillment" data-value="${k}">${f.label}</button>`).join("")
+};
+
+document.getElementById("chips").addEventListener("click", e => {
+  const which = e.target.closest("[data-filter]")?.dataset.filter;
+  if (!which) return;
+  const panel = document.getElementById("filterPanel");
+  if (which === "clear") {
+    state.category = state.fulfillment = "";
+    panel.hidden = true;
+    return paint();
+  }
+  panel.innerHTML = `<div class="chips">${PANELS[which]()}</div>`;
+  panel.hidden = false;
+});
+
+document.getElementById("filterPanel").addEventListener("click", e => {
+  const btn = e.target.closest("[data-set]");
+  if (!btn) return;
+  state[btn.dataset.set] = state[btn.dataset.set] === btn.dataset.value ? "" : btn.dataset.value;
+  document.getElementById("filterPanel").hidden = true;
+  paint();
+});
+
+document.getElementById("search").addEventListener("submit", e => {
+  e.preventDefault();
+  state.q = document.getElementById("q").value.trim();
+  paint();
+});
+
+document.getElementById("mapToggle").addEventListener("click", e => {
+  e.preventDefault();
+  alert("Map view comes after the pilot. For now, distance is shown on each farm.");
+});
+
+// --- render ---------------------------------------------------------------
+function matches(f) {
+  const hay = [f.displayName, f.town, f.bio,
+    ...(f.unlockedCategories || []).map(c => CATEGORIES[c]?.label)]
+    .join(" ").toLowerCase();
+  if (state.q && !hay.includes(state.q.toLowerCase())) return false;
+  if (state.category && !(f.unlockedCategories || []).includes(state.category)) return false;
+  if (state.fulfillment && !f.fulfillment?.[state.fulfillment]?.enabled) return false;
+  return true;
+}
+
+function paint() {
+  const shown = farms.filter(matches);
+
+  document.querySelectorAll("#chips .chip").forEach(c => {
+    const k = c.dataset.filter;
+    if (k === "clear") c.hidden = !(state.category || state.fulfillment);
+    else if (k === "category") c.firstChild.textContent =
+      state.category ? CATEGORIES[state.category].label + " " : "Product ";
+    else if (k === "fulfillment") c.firstChild.textContent =
+      state.fulfillment ? FULFILLMENT[state.fulfillment].label + " " : "Pickup ";
+  });
+
+  document.getElementById("summary").textContent = farms.length
+    ? `${shown.length} of ${farms.length} farms`
+    : "";
+
+  document.getElementById("results").innerHTML = shown.length ? shown.map(f => `
+    <a class="farm-row" href="farm.html?id=${f.id}">
+      <span class="thumb" style="background-image:url(${escapeHtml(f.coverPhotoUrl || "")})"></span>
+      <span class="meta">
+        <span class="fname">${escapeHtml(f.displayName)}</span>
+        <span class="fsub">${escapeHtml((f.unlockedCategories || []).map(c => CATEGORIES[c]?.label).filter(Boolean).join(" &middot; "))}</span>
+        <span class="fsub">${escapeHtml(f.town || "")}</span>
+        <span class="fsub">${pickupSummary(f)}</span>
+      </span>
+      <span class="badge ok">Verified</span>
+    </a>`).join("")
+    : `<div class="empty">${farms.length
+        ? "Nothing matches those filters. Try clearing one."
+        : "No farms have finished verification yet."}</div>`;
+}
+
+function pickupSummary(f) {
+  const on = Object.entries(f.fulfillment || {})
+    .filter(([, v]) => v?.enabled)
+    .map(([k]) => FULFILLMENT[k]?.label)
+    .filter(Boolean);
+  return on.length ? escapeHtml(on.join(" &middot; ")) : "Pickup details coming";
+}
+
+if (farms.length || !document.getElementById("results").querySelector(".empty")) paint();
+</script>
+</body>
+</html>

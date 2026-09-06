@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market Day &middot; Know your farmer. Love your food.</title>
+<meta name="description" content="Reserve fresh food from verified local growers, bakers and producers, then pick it up straight from them.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<main>
+  <section class="hero hero-band">
+    <div class="hero-inner">
+      <div class="hero-copy">
+        <h1>What&rsquo;s fresh near you?</h1>
+        <p class="sub">Know your farmer. Love your food.</p>
+        <form class="searchbar" id="search">
+          <input type="text" name="q" placeholder="Enter your city, zip code or browse farms..." aria-label="Search">
+          <button type="submit" aria-label="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+        </form>
+      </div>
+    </div>
+    <p class="hero-script">Good food<br>stronger<br>communities</p>
+  </section>
+
+  <div class="wrap">
+    <nav class="rail" id="rail" aria-label="Categories"></nav>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Featured Near You</h2>
+        <a class="see-all" href="explore.html">See All &rarr;</a>
+      </div>
+      <p class="section-sub">Fresh food. Real farmers. Stronger communities.</p>
+      <div class="grid" id="featured"><div class="spinner">Loading&hellip;</div></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Local Farms Near You</h2>
+        <a class="see-all" href="explore.html?view=farms">See All &rarr;</a>
+      </div>
+      <p class="section-sub">Every one of them verified before they could list a thing.</p>
+      <div id="farms"><div class="spinner">Loading&hellip;</div></div>
+    </section>
+
+    <section class="section">
+      <div class="panel row">
+        <span class="p-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 3c0 9-5.5 14-11 14a6 6 0 0 1-6-6C3 6 9 3 20 3z"/></svg></span>
+        <span><strong>Pickup, not delivery</strong>
+          <span class="muted small">Reserve ahead and collect your order straight from the people who grew it, at the market or at their place. You pay them directly. Market Day never touches your money.</span></span>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script type="module">
+// Its own module on purpose. If the Firebase SDK fails to load, blocked by
+// an ad blocker or a slow CDN, the page still has working navigation.
+import { renderChrome } from "./chrome.js";
+renderChrome({ active: "home" });
+</script>
+
+<script type="module">
+import { db } from "./firebase.js";
+import { money, escapeHtml } from "./chrome.js";
+import { add, paintBadge } from "./basket.js";
+import { CATEGORIES } from "./catalog.js";
+import { collection, query, where, orderBy, limit, getDocs, doc, getDoc }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+document.getElementById("search").addEventListener("submit", e => {
+  e.preventDefault();
+  const q = new FormData(e.target).get("q");
+  location.href = "explore.html?q=" + encodeURIComponent(q || "");
+});
+
+// --- category rail. Platform art, ours, from img/. -------------------------
+const RAIL = [
+  ["produce","Produce"], ["meat","Meat"], ["eggs","Eggs"], ["baked","Bakery"],
+  ["honey_comb","Honey"], ["flowers","Flowers"], ["dairy","Dairy"], ["preserves","Preserves"]
+];
+const CAT_IMG = { produce:"produce", meat:"meat", eggs:"eggs", baked:"bakery",
+  honey_comb:"honey", flowers:"flowers", dairy:"dairy", preserves:"preserves" };
+
+document.getElementById("rail").innerHTML = RAIL.map(([key, label]) => `
+  <a class="cat" href="explore.html?category=${key}">
+    <span class="disc" style="background-image:url(img/cat-${CAT_IMG[key]}.jpg)"></span>${label}
+  </a>`).join("");
+
+// --- featured listings. Seller photos only. -------------------------------
+const sellerCache = new Map();
+async function getSeller(id) {
+  if (!sellerCache.has(id)) {
+    const snap = await getDoc(doc(db, "sellers", id));
+    sellerCache.set(id, snap.exists() ? { id, ...snap.data() } : null);
+  }
+  return sellerCache.get(id);
+}
+
+try {
+  const q = query(collection(db, "listings"),
+    where("status", "==", "published"),
+    orderBy("createdAt", "desc"), limit(10));
+  const listings = (await getDocs(q)).docs.map(d => ({ id: d.id, ...d.data() }));
+
+  const box = document.getElementById("featured");
+  if (!listings.length) {
+    box.outerHTML = `<div class="empty">Nothing listed yet. The first farms are being verified now.</div>`;
+  } else {
+    box.innerHTML = (await Promise.all(listings.map(async l => {
+      const s = await getSeller(l.sellerId);
+      return `<a class="product" href="farm.html?id=${l.sellerId}#${l.id}">
+        <span class="thumb" style="background-image:url(${escapeHtml(l.photoUrl)})"></span>
+        <span class="body">
+          <span class="farm">${escapeHtml(s?.displayName || "")}</span>
+          <span class="name">${escapeHtml(l.title)}</span>
+          <span class="foot">
+            <span class="price">${money(l.price)} <span>${escapeHtml(l.unit || "")}</span></span>
+            <button class="add" data-listing="${l.id}" aria-label="Add ${escapeHtml(l.title)} to basket">+</button>
+          </span>
+        </span></a>`;
+    }))).join("");
+
+    box.addEventListener("click", async e => {
+      const id = e.target.dataset.listing;
+      if (!id) return;
+      e.preventDefault();
+      const listing = listings.find(l => l.id === id);
+      add(listing, await getSeller(listing.sellerId));
+      paintBadge();
+      e.target.textContent = "✓";
+      setTimeout(() => (e.target.textContent = "+"), 1200);
+    });
+  }
+} catch (err) {
+  console.error(err);
+  document.getElementById("featured").outerHTML =
+    `<div class="empty">Could not load listings just now. Refresh to try again.</div>`;
+}
+
+// --- verified farms -------------------------------------------------------
+try {
+  const q = query(collection(db, "sellers"),
+    where("status", "==", "verified"), limit(6));
+  const farms = (await getDocs(q)).docs.map(d => ({ id: d.id, ...d.data() }));
+
+  document.getElementById("farms").innerHTML = farms.length ? farms.map(f => `
+    <a class="farm-row" href="farm.html?id=${f.id}">
+      <span class="thumb" style="background-image:url(${escapeHtml(f.coverPhotoUrl || "")})"></span>
+      <span class="meta">
+        <span class="fname">${escapeHtml(f.displayName)}</span>
+        <span class="fsub">${escapeHtml(f.town || "")}</span>
+        <span class="fsub">${escapeHtml((f.unlockedCategories || []).map(c => CATEGORIES[c]?.label).filter(Boolean).join(" &middot; "))}</span>
+      </span>
+      <span class="badge ok">Verified</span>
+    </a>`).join("")
+    : `<div class="empty">No farms have finished verification yet.</div>`;
+} catch (err) {
+  console.error(err);
+  document.getElementById("farms").innerHTML =
+    `<div class="empty">Could not load farms just now.</div>`;
+}
+</script>
+</body>
+</html>

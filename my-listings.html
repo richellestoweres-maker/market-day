@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your listings &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="seller-dashboard.html" class="back-link">&larr;</a>
+  <div class="topbar-center"><div class="eyebrow">Sellers</div><h1 class="page-title">Your listings</h1></div>
+</header>
+<main class="wrap narrow">
+  <div id="list"><div class="spinner">Loading&hellip;</div></div>
+  <a class="btn block" href="add-listing.html">Add a listing</a>
+</main>
+
+<script type="module">
+import { db } from "./firebase.js";
+import { requireSession, toast } from "./session.js";
+import { money, escapeHtml } from "./chrome.js";
+import { CATEGORIES } from "./catalog.js";
+import { collection, query, where, getDocs, doc, updateDoc }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+const { user } = await requireSession({ require: "seller" });
+
+try {
+  const mine = (await getDocs(query(collection(db, "listings"),
+    where("sellerId", "==", user.uid)))).docs.map(d => ({ id: d.id, ...d.data() }));
+
+  document.getElementById("list").innerHTML = mine.length ? mine.map(l => `
+    <div class="card" id="l-${l.id}">
+      <div class="card-row">
+        <span class="thumb sq" style="background-image:url(${escapeHtml(l.photoUrl || "")})"></span>
+        <div class="grow">
+          <h3>${escapeHtml(l.title)}</h3>
+          <div class="muted small">${escapeHtml(CATEGORIES[l.category]?.label || l.category)} &middot;
+            ${money(l.price)} ${escapeHtml(l.unit || "")} &middot; ${l.quantityAvailable} left</div>
+        </div>
+        <span class="badge ${l.status === "published" ? "ok" : "pending"}">${
+          l.status === "published" ? "Live" : "Hidden"}</span>
+      </div>
+      <div class="card-row">
+        <div class="stepper"><button data-less="${l.id}">&minus;</button>
+          <span class="qty" id="q-${l.id}">${l.quantityAvailable}</span>
+          <button data-more="${l.id}">+</button></div>
+        <span class="grow"></span>
+        <button class="btn ghost sm" data-toggle="${l.id}">${
+          l.status === "published" ? "Hide" : "Show"}</button>
+      </div>
+    </div>`).join("")
+    : `<div class="empty">Nothing listed yet.</div>`;
+
+  document.getElementById("list").addEventListener("click", async e => {
+    const t = e.target;
+    const id = t.dataset.less || t.dataset.more || t.dataset.toggle;
+    if (!id) return;
+    const listing = mine.find(l => l.id === id);
+    t.disabled = true;
+
+    try {
+      if (t.dataset.toggle) {
+        listing.status = listing.status === "published" ? "hidden" : "published";
+        await updateDoc(doc(db, "listings", id), { status: listing.status });
+        t.textContent = listing.status === "published" ? "Hide" : "Show";
+        toast(listing.status === "published" ? "Back on the shelf." : "Hidden from buyers.");
+      } else {
+        const next = Math.max(0, listing.quantityAvailable + (t.dataset.more ? 1 : -1));
+        listing.quantityAvailable = next;
+        await updateDoc(doc(db, "listings", id), { quantityAvailable: next });
+        document.getElementById("q-" + id).textContent = next;
+      }
+    } catch (err) { console.error(err); toast("That did not save."); }
+    t.disabled = false;
+  });
+} catch (err) {
+  console.error(err);
+  document.getElementById("list").innerHTML = `<div class="empty">Could not load your listings.</div>`;
+}
+</script>
+</body>
+</html>

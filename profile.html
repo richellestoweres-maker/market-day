@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your account &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main class="wrap narrow">
+  <h1 class="page-title big" style="padding-top:26px" id="hello">Your account</h1>
+  <div id="body"><div class="spinner">Loading&hellip;</div></div>
+</main>
+
+<script type="module">
+// Its own module on purpose. If the Firebase SDK fails to load, blocked by
+// an ad blocker or a slow CDN, the page still has working navigation.
+import { renderChrome } from "./chrome.js";
+renderChrome({ active: "profile" });
+</script>
+
+<script type="module">
+import { auth } from "./firebase.js";
+import { requireSession } from "./session.js";
+import { escapeHtml } from "./chrome.js";
+import { signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+
+const { profile, seller } = await requireSession();
+
+document.getElementById("hello").textContent = profile?.name ? `Hello, ${profile.name}` : "Your account";
+document.getElementById("body").innerHTML = `
+  <div class="card">
+    <div class="card-row"><div class="grow"><h3>Your pickups</h3>
+      <div class="muted small">Codes, what you reserved, and where to collect it.</div></div>
+      <a class="btn ghost sm" href="orders.html">Open</a></div>
+    ${seller
+      ? `<div class="card-row"><div class="grow"><h3>${escapeHtml(seller.displayName || "Your farm")}</h3>
+         <div class="muted small">Listings, pack list and documents.</div></div>
+         <a class="btn ghost sm" href="seller-dashboard.html">Open</a></div>`
+      : `<div class="card-row"><div class="grow"><h3>Sell on Market Day</h3>
+         <div class="muted small">Growers, bakers and producers welcome. Verification takes a day or two.</div></div>
+         <a class="btn ghost sm" href="seller-setup.html">Start</a></div>`}
+    ${profile?.role === "admin"
+      ? `<div class="card-row"><div class="grow"><h3>Admin</h3>
+         <div class="muted small">Review queue and everything else.</div></div>
+         <a class="btn ghost sm" href="admin-dashboard.html">Open</a></div>` : ""}
+  </div>
+  <button class="btn ghost block" id="out">Log out</button>`;
+
+document.getElementById("out").onclick = async () => {
+  await signOut(auth);
+  location.href = "index.html";
+};
+</script>
+</body>
+</html>

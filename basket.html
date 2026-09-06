@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Market Basket &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<main class="wrap narrow">
+  <h1 class="page-title big">Your Market Basket</h1>
+  <p class="section-sub" id="sub"></p>
+  <div id="groups"></div>
+</main>
+
+<script type="module">
+// Its own module on purpose. If the Firebase SDK fails to load, blocked by
+// an ad blocker or a slow CDN, the page still has working navigation.
+import { renderChrome } from "./chrome.js";
+renderChrome({ active: "basket" });
+</script>
+
+<script type="module">
+import { db, auth } from "./firebase.js";
+import { money, escapeHtml } from "./chrome.js";
+import { groups, setQuantity, total, count, clear, paintBadge } from "./basket.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+import { collection, addDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+let user = null;
+onAuthStateChanged(auth, u => { user = u; paint(); });
+
+function paint() {
+  const gs = groups();
+  const box = document.getElementById("groups");
+  const sub = document.getElementById("sub");
+
+  if (!gs.length) {
+    sub.textContent = "";
+    box.innerHTML = `<div class="empty">Your basket is empty.<br>
+      <a class="btn sm" style="margin-top:14px" href="explore.html">Find something fresh</a></div>`;
+    return paintBadge();
+  }
+
+  // One group per collection point. Four farms at the same market is one trip,
+  // four farms in four places is four, and the buyer should see which they have.
+  sub.textContent = gs.length === 1
+    ? "One stop to collect everything."
+    : `${gs.length} separate pickups. Each farm hands over their own order.`;
+
+  box.innerHTML = gs.map(g => `
+    <div class="card">
+      <div class="card-row"><span class="badge info">${escapeHtml(g.label)}</span></div>
+      ${g.lines.map(l => `
+        <div class="line">
+          <span class="thumb sq" style="background-image:url(${escapeHtml(l.photoUrl)})"></span>
+          <span class="meta">
+            <span class="fname">${escapeHtml(l.title)}</span>
+            <span class="fsub">${escapeHtml(l.sellerName)}</span>
+            <span class="price">${money(l.price)} <span class="muted">${escapeHtml(l.unit || "")}</span></span>
+          </span>
+          <span class="stepper">
+            <button data-less="${l.listingId}" aria-label="One fewer ${escapeHtml(l.title)}">&minus;</button>
+            <span class="qty">${l.quantity}</span>
+            <button data-more="${l.listingId}" aria-label="One more ${escapeHtml(l.title)}">+</button>
+          </span>
+        </div>`).join("")}
+      <div class="card-row"><span class="grow"><strong>Collect here</strong></span><strong>${money(g.subtotal)}</strong></div>
+    </div>`).join("")
+    + `
+    <div class="panel row">
+      <span class="p-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 3c0 9-5.5 14-11 14a6 6 0 0 1-6-6C3 6 9 3 20 3z"/></svg></span>
+      <span><strong>Pickup, not delivery</strong>
+        <span class="muted small">Support local farms. Collect your order directly from the people who made it.</span></span>
+    </div>
+    <div class="card-row"><span class="grow"><strong>Total</strong></span><strong>${money(total())}</strong></div>
+    <button class="btn brick block" id="reserve">Reserve for Pickup</button>
+    <p class="muted small center">Reserving holds your items. You pay each farm when you collect,
+    so Market Day never takes your card.</p>`;
+
+  paintBadge();
+}
+
+document.getElementById("groups").addEventListener("click", async e => {
+  const less = e.target.dataset.less, more = e.target.dataset.more;
+  if (less || more) {
+    const id = less || more;
+    const line = groups().flatMap(g => g.lines).find(l => l.listingId === id);
+    setQuantity(id, line.quantity + (more ? 1 : -1));
+    return paint();
+  }
+
+  if (e.target.id !== "reserve") return;
+
+  if (!user) {
+    sessionStorage.setItem("marketday.after_login", "basket.html");
+    return location.href = "login.html";
+  }
+
+  e.target.disabled = true;
+  e.target.textContent = "Reserving…";
+
+  try {
+    // One reservation per line, so a farm can mark their own items collected
+    // without touching anybody else's. item_snapshot is what the buyer agreed to.
+    const code = Math.random().toString(36).slice(2, 7).toUpperCase();
+    for (const g of groups()) {
+      for (const l of g.lines) {
+        await addDoc(collection(db, "reservations"), {
+          listingId: l.listingId,
+          sellerId: l.sellerId,
+          buyerId: user.uid,
+          quantity: l.quantity,
+          fulfillmentMethod: l.pickupKey.split(":")[0],
+          fulfillmentSnapshot: { label: l.pickup, key: l.pickupKey },
+          itemSnapshot: {
+            title: l.title, price: l.price, unit: l.unit,
+            photoUrl: l.photoUrl, sellerName: l.sellerName
+          },
+          code,
+          status: "reserved",
+          reservedAt: serverTimestamp()
+        });
+      }
+    }
+    clear();
+    location.href = "reserved.html?code=" + code;
+  } catch (err) {
+    console.error(err);
+    e.target.disabled = false;
+    e.target.textContent = "Reserve for Pickup";
+    alert("That did not go through. Nothing was reserved, so try again in a moment.");
+  }
+});
+
+paint();
+</script>
+</body>
+</html>

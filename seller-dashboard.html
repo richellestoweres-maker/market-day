@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your farm &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="index.html" class="back-link">&larr;</a>
+  <div class="topbar-center">
+    <div class="eyebrow">Sellers</div>
+    <h1 class="page-title" id="farmName">Your farm</h1>
+  </div>
+</header>
+
+<main class="wrap narrow">
+  <div id="alerts"></div>
+
+  <h2 class="plain">This week&rsquo;s pack list</h2>
+  <p class="section-sub">Everything reserved, grouped by how it goes out. Print it Friday night.</p>
+  <div id="packlist"><div class="spinner">Loading&hellip;</div></div>
+
+  <h2 class="plain">Your listings</h2>
+  <div id="listings"></div>
+  <a class="btn block" href="add-listing.html">Add a listing</a>
+
+  <h2 class="plain">Your farm</h2>
+  <div class="card">
+    <div class="card-row"><div class="grow"><h3>Documents</h3>
+      <div class="muted small" id="docSummary"></div></div>
+      <a class="btn ghost sm" href="verification.html">Manage</a></div>
+    <div class="card-row"><div class="grow"><h3>Profile and pickup</h3>
+      <div class="muted small">Your photo, your story, and how buyers collect.</div></div>
+      <a class="btn ghost sm" href="seller-setup.html">Edit</a></div>
+  </div>
+</main>
+
+<script type="module">
+import { db } from "./firebase.js";
+import { requireSession, toast, fmtDate } from "./session.js";
+import { money, escapeHtml } from "./chrome.js";
+import { unlockedCategories, expiringSoon, CATEGORIES, DOC_TYPES } from "./catalog.js";
+import { collection, query, where, getDocs, doc, updateDoc }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+const { user, seller, verifications } = await requireSession({ require: "seller" });
+document.getElementById("farmName").textContent = seller.displayName || "Your farm";
+
+// --- alerts ---------------------------------------------------------------
+const unlocked = unlockedCategories(verifications);
+const soon = expiringSoon(verifications, 30);
+const alerts = document.getElementById("alerts");
+
+if (!unlocked.length) {
+  alerts.innerHTML += `<div class="notice warn"><strong>You cannot list yet.</strong>
+    Send us a document and we will open the categories it covers.
+    <a href="verification.html">Add a document</a>.</div>`;
+}
+if (soon.length) {
+  alerts.innerHTML += `<div class="notice warn"><strong>Something expires soon.</strong>
+    ${soon.map(d => `${DOC_TYPES[d.docType]?.label} on ${fmtDate(d.expiresOn)}`).join(", ")}.
+    Send a new one and nothing goes offline.</div>`;
+}
+document.getElementById("docSummary").textContent = unlocked.length
+  ? "Open: " + unlocked.map(c => CATEGORIES[c].label).join(", ")
+  : "Nothing approved yet";
+
+// --- pack list ------------------------------------------------------------
+try {
+  const res = (await getDocs(query(collection(db, "reservations"),
+    where("sellerId", "==", user.uid), where("status", "==", "reserved"))))
+    .docs.map(d => ({ id: d.id, ...d.data() }));
+
+  const box = document.getElementById("packlist");
+
+  if (!res.length) {
+    box.innerHTML = `<div class="empty">Nothing reserved yet this week.</div>`;
+  } else {
+    // group by how it goes out, so the market pile and the delivery run are separate
+    const groups = new Map();
+    res.forEach(r => {
+      const key = r.fulfillmentSnapshot?.label || "Pickup";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(r);
+    });
+
+    box.innerHTML = [...groups].map(([label, rows]) => `
+      <div class="card">
+        <div class="card-row"><span class="badge info">${escapeHtml(label)}</span>
+          <span class="grow"></span>
+          <span class="muted small">${rows.length} order${rows.length > 1 ? "s" : ""}</span></div>
+        ${rows.map(r => `
+          <div class="line">
+            <span class="thumb sq" style="background-image:url(${escapeHtml(r.itemSnapshot?.photoUrl || "")})"></span>
+            <span class="meta">
+              <span class="fname">${r.quantity} &times; ${escapeHtml(r.itemSnapshot?.title || "")}</span>
+              <span class="fsub">Code ${escapeHtml(r.code)} &middot; ${money((r.itemSnapshot?.price || 0) * r.quantity)}</span>
+            </span>
+            <span style="display:flex;gap:6px">
+              <button class="btn sm" data-collected="${r.id}">Collected</button>
+              <button class="btn ghost sm" data-noshow="${r.id}">No show</button>
+            </span>
+          </div>`).join("")}
+      </div>`).join("");
+
+    box.addEventListener("click", async e => {
+      const id = e.target.dataset.collected || e.target.dataset.noshow;
+      if (!id) return;
+      e.target.disabled = true;
+      try {
+        await updateDoc(doc(db, "reservations", id), {
+          status: e.target.dataset.collected ? "collected" : "no_show"
+        });
+        e.target.closest(".line").style.opacity = ".4";
+        toast(e.target.dataset.collected ? "Marked collected." : "Marked as a no show.");
+      } catch (err) {
+        console.error(err); e.target.disabled = false; toast("That did not save.");
+      }
+    });
+  }
+} catch (err) {
+  console.error(err);
+  document.getElementById("packlist").innerHTML =
+    `<div class="empty">Could not load reservations just now.</div>`;
+}
+
+// --- listings -------------------------------------------------------------
+try {
+  const mine = (await getDocs(query(collection(db, "listings"),
+    where("sellerId", "==", user.uid)))).docs.map(d => ({ id: d.id, ...d.data() }));
+
+  document.getElementById("listings").innerHTML = mine.length ? `<div class="card">${
+    mine.map(l => `<div class="card-row">
+      <span class="thumb sq" style="background-image:url(${escapeHtml(l.photoUrl || "")})"></span>
+      <div class="grow"><h3>${escapeHtml(l.title)}</h3>
+        <div class="muted small">${money(l.price)} ${escapeHtml(l.unit || "")} &middot;
+        ${l.quantityAvailable} left</div></div>
+      <span class="badge ${l.status === "published" ? "ok" : "pending"}">${
+        l.status === "published" ? "Live" : "Hidden"}</span>
+    </div>`).join("")}</div>`
+    : `<div class="empty">No listings yet.</div>`;
+} catch (err) {
+  console.error(err);
+  document.getElementById("listings").innerHTML = `<div class="empty">Could not load your listings.</div>`;
+}
+</script>
+</body>
+</html>

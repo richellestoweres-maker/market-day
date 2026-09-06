@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your pickups &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main class="wrap narrow">
+  <h1 class="page-title big" style="padding-top:26px">Your pickups</h1>
+  <p class="section-sub">Show the code when you collect. You pay the farm then.</p>
+  <div id="list"><div class="spinner">Loading&hellip;</div></div>
+</main>
+
+<script type="module">
+// Its own module on purpose. If the Firebase SDK fails to load, blocked by
+// an ad blocker or a slow CDN, the page still has working navigation.
+import { renderChrome } from "./chrome.js";
+renderChrome({ active: "profile" });
+</script>
+
+<script type="module">
+import { db } from "./firebase.js";
+import { requireSession, fmtDate, toast } from "./session.js";
+import { money, escapeHtml } from "./chrome.js";
+import { collection, query, where, getDocs, doc, updateDoc }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+const { user } = await requireSession();
+
+const STATUS = { reserved: ["info","Reserved"], collected: ["ok","Collected"],
+  no_show: ["bad","Missed"], cancelled_by_buyer: ["bad","Cancelled"],
+  cancelled_by_seller: ["bad","Cancelled by the farm"] };
+
+try {
+  const rows = (await getDocs(query(collection(db, "reservations"),
+    where("buyerId", "==", user.uid)))).docs.map(d => ({ id: d.id, ...d.data() }));
+
+  const groups = new Map();
+  rows.forEach(r => {
+    const key = r.code || r.id;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  });
+
+  document.getElementById("list").innerHTML = rows.length ? [...groups].map(([code, rs]) => `
+    <div class="card">
+      <div class="card-row">
+        <div class="grow"><h3>${escapeHtml(rs[0].fulfillmentSnapshot?.label || "Pickup")}</h3>
+          <div class="muted small">${fmtDate(rs[0].reservedAt)}</div></div>
+        <span class="badge ${STATUS[rs[0].status]?.[0] || "info"}">${STATUS[rs[0].status]?.[1] || rs[0].status}</span>
+      </div>
+      <div class="code-card" style="font-size:28px;padding:16px">${escapeHtml(code)}</div>
+      ${rs.map(r => `<div class="line">
+        <span class="thumb sq" style="background-image:url(${escapeHtml(r.itemSnapshot?.photoUrl || "")})"></span>
+        <span class="meta"><span class="fname">${r.quantity} &times; ${escapeHtml(r.itemSnapshot?.title || "")}</span>
+          <span class="fsub">${escapeHtml(r.itemSnapshot?.sellerName || "")}</span>
+          <span class="price">${money((r.itemSnapshot?.price || 0) * r.quantity)}</span></span>
+        ${r.status === "reserved" ? `<button class="btn ghost sm" data-cancel="${r.id}">Cancel</button>` : ""}
+      </div>`).join("")}
+    </div>`).join("")
+    : `<div class="empty">Nothing reserved yet.<br>
+       <a class="btn sm" style="margin-top:14px" href="explore.html">Find something fresh</a></div>`;
+
+  document.getElementById("list").addEventListener("click", async e => {
+    const id = e.target.dataset.cancel;
+    if (!id) return;
+    e.target.disabled = true;
+    try {
+      await updateDoc(doc(db, "reservations", id), { status: "cancelled_by_buyer" });
+      e.target.closest(".line").style.opacity = ".4";
+      toast("Cancelled. The farm has been told.");
+    } catch (err) { console.error(err); e.target.disabled = false; toast("That did not save."); }
+  });
+} catch (err) {
+  console.error(err);
+  document.getElementById("list").innerHTML = `<div class="empty">Could not load your pickups.</div>`;
+}
+</script>
+</body>
+</html>
