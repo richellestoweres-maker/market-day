@@ -32,7 +32,7 @@ export function renderChrome(opts = {}) {
           <a class="icon-btn" href="explore.html" aria-label="Search">${ICON.search}</a>
           <a class="icon-btn" href="basket.html" aria-label="Basket">${ICON.basket}
             <span class="dot" data-basket-count hidden>0</span></a>
-          <a class="btn brick sm" href="create-account.html">Sign Up</a>
+          <a class="btn brick sm" href="create-account.html" data-auth-cta>Sign Up</a>
         </div>
       </div>
     </header>`);
@@ -47,6 +47,38 @@ export function renderChrome(opts = {}) {
 
   document.body.classList.add("has-tabbar");
   paintBadge();
+  reflectAuth();
+}
+
+/**
+ * Swap the Sign Up button for an account link once we know who is here.
+ * Loaded dynamically and inside a try, so this module still has no hard
+ * dependency on Firebase. If the SDK fails, the nav simply stays signed out
+ * rather than disappearing, which is the whole reason it lives in its own file.
+ */
+async function reflectAuth() {
+  try {
+    const { auth } = await import("./firebase.js");
+    const { onAuthStateChanged } =
+      await import("https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js");
+
+    onAuthStateChanged(auth, user => {
+      document.querySelectorAll("[data-auth-cta]").forEach(cta => {
+        if (user) {
+          cta.textContent = "Account";
+          cta.href = "profile.html";
+          cta.classList.replace("brick", "ghost");
+        } else {
+          cta.textContent = "Sign Up";
+          cta.href = "create-account.html";
+          cta.classList.replace("ghost", "brick");
+        }
+      });
+      document.body.classList.toggle("signed-in", !!user);
+    });
+  } catch (err) {
+    console.warn("Could not read sign in state, leaving the header signed out.", err);
+  }
 }
 
 export function money(n) {
