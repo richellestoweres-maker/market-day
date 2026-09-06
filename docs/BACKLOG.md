@@ -36,6 +36,28 @@ Ordered roughly by build sequence. Each one is small enough to be a single GitHu
 23. Mark collected, and mark no show
 24. Buyer completion rate, visible to sellers
 
+## Built so far
+
+Milestone 1 is complete, and most of 2 and 3. Pages in the repo:
+
+| Page | What it does |
+| --- | --- |
+| index.html | Home. Hero, category rail, featured listings, verified farms |
+| explore.html | Search and filter farms by product and pickup method |
+| farm.html | A farm's profile, products, pickup details, add to basket |
+| basket.html | Basket grouped by collection point, reserve without paying |
+| reserved.html | The pickup code |
+| orders.html | A buyer's pickups, with cancel |
+| profile.html | Account, links to selling and admin |
+| about.html | Our Story |
+| login.html, create-account.html | Auth |
+| seller-setup.html | Seller onboarding, types and farm cover photo |
+| verification.html | Document upload, unlock status |
+| add-listing.html | Create a listing, category gated, with the label generator |
+| my-listings.html | Quantity, hide and show |
+| seller-dashboard.html | Pack list, listings, document status |
+| admin-dashboard.html, admin-verifications.html | Review queue |
+
 ## Milestone 4, pilot ready
 
 25. Reviews, gated to collected reservations
