@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting paid &middot; Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="seller-dashboard.html" class="back-link">&larr;</a>
+  <div class="topbar-center">
+    <div class="eyebrow">Sellers</div>
+    <h1 class="page-title">Getting paid</h1>
+  </div>
+</header>
+
+<main class="wrap narrow">
+  <div id="body"><div class="spinner">Checking&hellip;</div></div>
+
+  <div class="card">
+    <h3>How the money works</h3>
+    <div class="card-row"><div class="grow">
+      <h3>You keep your full price</h3>
+      <div class="muted small">List a loaf at $7 and $7 lands in your account. Market Day
+      does not take a cut of your price.</div></div></div>
+    <div class="card-row"><div class="grow">
+      <h3>The buyer pays the service fee</h3>
+      <div class="muted small">10% plus 30 cents, shown to them as one line at checkout.
+      That covers card processing and keeps the lights on here.</div></div></div>
+    <div class="card-row"><div class="grow">
+      <h3>Stripe pays you directly</h3>
+      <div class="muted small">Money goes to your bank on Stripe's normal schedule,
+      usually a couple of days. Stripe sends your 1099 at tax time.</div></div></div>
+  </div>
+</main>
+
+<script type="module">
+import { app } from "./firebase.js";
+import { requireSession, toast } from "./session.js";
+import { escapeHtml } from "./chrome.js";
+import { getFunctions, httpsCallable }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-functions.js";
+
+const { seller } = await requireSession({ require: "seller" });
+const fns = getFunctions(app);
+const body = document.getElementById("body");
+
+if (new URLSearchParams(location.search).has("done")) {
+  toast("Thanks. Checking with Stripe.");
+}
+
+let status = { connected: false, payoutsEnabled: false, stillNeeded: [] };
+try {
+  status = (await httpsCallable(fns, "payoutStatus")()).data;
+} catch (err) {
+  console.error(err);
+}
+
+if (status.payoutsEnabled) {
+  body.innerHTML = `<div class="notice good">
+    <strong>You're set up to be paid.</strong> Buyers can check out with your items,
+    and the money goes straight to your bank.</div>`;
+} else if (status.connected) {
+  body.innerHTML = `<div class="notice warn">
+      <strong>Stripe still needs a few things.</strong>
+      ${status.stillNeeded?.length
+        ? "Outstanding: " + escapeHtml(status.stillNeeded.join(", ").replace(/_/g, " ")) + "."
+        : "Finish the form and you're done."}
+    </div>
+    <button class="btn block" id="go">Finish with Stripe</button>`;
+} else {
+  body.innerHTML = `<div class="notice warn">
+      <strong>You can list, but not sell yet.</strong> Stripe handles the money, so they
+      need your legal name, address, tax ID and bank account before anyone can pay you.
+      It takes about five minutes and Market Day never sees any of it.
+    </div>
+    <button class="btn block" id="go">Set up payouts with Stripe</button>`;
+}
+
+document.getElementById("go")?.addEventListener("click", async e => {
+  e.target.disabled = true;
+  e.target.textContent = "Opening Stripe…";
+  try {
+    const { data } = await httpsCallable(fns, "startPayoutSetup")();
+    location.href = data.url;
+  } catch (err) {
+    console.error(err);
+    toast(err.message || "Could not reach Stripe. Try again.");
+    e.target.disabled = false;
+    e.target.textContent = "Set up payouts with Stripe";
+  }
+});
+</script>
+</body>
+</html>

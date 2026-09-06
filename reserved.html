@@ -12,10 +12,10 @@
 <body>
 <main class="wrap narrow auth center">
   <h1 class="page-title big">You&rsquo;re all set</h1>
-  <p class="muted">Show this code when you collect.</p>
+  <p class="muted">Paid. Show this code when you collect.</p>
   <div class="card code-card"><span id="code">&mdash;</span></div>
-  <p class="small muted">Each farm hands over their own order and takes payment then.
-  Nothing has been charged here.</p>
+  <p class="small muted" id="detail">Your items are held and each farm has been paid in full.
+  Nothing more to hand over at pickup, just the code.</p>
   <a class="btn block" href="orders.html">See your pickups</a>
   <p class="center small"><a href="explore.html">Keep browsing</a></p>
 </main>
@@ -23,8 +23,33 @@
 <script type="module">
 import { renderChrome } from "./chrome.js";
 renderChrome();
-const code = new URLSearchParams(location.search).get("code");
-document.getElementById("code").textContent = code || "—";
+const params = new URLSearchParams(location.search);
+const orderId = params.get("order");
+
+// Stripe sends the buyer back the instant they pay, but the webhook that turns
+// the payment into reservations lands a moment later. Wait for it rather than
+// showing a code for an order that does not exist yet.
+if (orderId) {
+  document.getElementById("code").textContent = orderId.slice(-5).toUpperCase();
+  const { db } = await import("./firebase.js");
+  const { doc, onSnapshot } =
+    await import("https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js");
+  const detail = document.getElementById("detail");
+  detail.textContent = "Confirming your payment…";
+
+  onSnapshot(doc(db, "orders", orderId), snap => {
+    const status = snap.data()?.status;
+    if (status === "paid") {
+      detail.textContent = "Your items are held and each farm has been paid in full. " +
+        "Nothing more to hand over at pickup, just the code.";
+    } else if (status === "needs_attention") {
+      detail.textContent = "Your payment went through, but something went wrong setting " +
+        "the order up. We can see it and will sort it out. Nothing is lost.";
+    }
+  });
+} else {
+  document.getElementById("code").textContent = params.get("code") || "—";
+}
 </script>
 </body>
 </html>

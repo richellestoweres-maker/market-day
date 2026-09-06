@@ -12,14 +12,14 @@ Storage, no build step, the same shape as RentEvent.
 Firebase project `market-day-261be` is live, with Email/Password auth and
 Firestore already switched on. The config is in `firebase.js`.
 
-**Two things still outstanding:**
+Live at **richellestoweres-maker.github.io/market-day**
 
-1. **Publish `firestore.rules`.** Firestore console, Rules tab, paste the file,
-   Publish. Until then the database is closed to everyone, which is safe but
-   means nothing works.
-2. **Cloud Storage needs the Blaze plan.** It is the only paid piece, it stores
-   seller documents and photos, and until it is on, uploads fail with a clear
-   message while the rest of the site works.
+**Still outstanding:** payments. Sellers set their own prices and keep 100% of
+them. The buyer pays one service fee, 10% plus 30 cents, shown as a single line
+at checkout, and Stripe's cut comes out of Market Day's share rather than the
+farm's. The code is written and needs four setup steps, all in
+[docs/STRIPE-SETUP.md](docs/STRIPE-SETUP.md). Cloud Storage rides along on the
+same Blaze upgrade, so seller photos start working at the same time.
 
 ## What version 1 is
 
@@ -32,8 +32,8 @@ Buyers browse verified local sellers, reserve items, and collect them. The platf
 | Codebase | Fork patterns and components from RentEvent |
 | Launch anchor | One existing Saturday farmers market, one town |
 | Fulfillment | Seller chooses: market pickup, store pickup, porch pickup, drop off |
-| Payments | Buyer pays the seller directly. No payment processing in v1 |
-| Revenue | Free during pilot, then a flat monthly vendor fee |
+| Payments | Stripe Connect. Sellers keep 100% of their listed price |
+| Revenue | Buyer service fee, 10% plus 30 cents, one line at checkout |
 
 ## Documents
 
@@ -42,6 +42,7 @@ Buyers browse verified local sellers, reserve items, and collect them. The platf
 | [docs/PLAN.md](docs/PLAN.md) | Full version 1 plan, verification tiers, launch sequence |
 | [docs/DATA-MODEL.md](docs/DATA-MODEL.md) | Entities, fields and the invariants the app must enforce |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | Starter issues, ready to open as GitHub issues |
+| [docs/STRIPE-SETUP.md](docs/STRIPE-SETUP.md) | Turning payments on, step by step |
 | [CLAUDE.md](CLAUDE.md) | Project rules for Claude sessions working in this repo |
 
 ## The non negotiable rules

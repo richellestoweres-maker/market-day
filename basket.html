@@ -25,12 +25,19 @@ renderChrome({ active: "basket" });
 </script>
 
 <script type="module">
-import { db, auth } from "./firebase.js";
+import { app, auth } from "./firebase.js";
 import { money, escapeHtml } from "./chrome.js";
 import { groups, setQuantity, total, count, clear, paintBadge } from "./basket.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
-import { collection, addDoc, serverTimestamp }
-  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { getFunctions, httpsCallable }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-functions.js";
+
+const fns = getFunctions(app);
+
+// Shown so the total is never a surprise. The server prices it again from the
+// listings themselves, so this is a preview, not the source of truth.
+const SERVICE_FEE_RATE = 0.10, SERVICE_FEE_FIXED = 0.30;
+const serviceFee = subtotal => Math.round((subtotal * SERVICE_FEE_RATE + SERVICE_FEE_FIXED) * 100) / 100;
 
 let user = null;
 onAuthStateChanged(auth, u => { user = u; paint(); });
@@ -78,10 +85,15 @@ function paint() {
       <span><strong>Pickup, not delivery</strong>
         <span class="muted small">Support local farms. Collect your order directly from the people who made it.</span></span>
     </div>
-    <div class="card-row"><span class="grow"><strong>Total</strong></span><strong>${money(total())}</strong></div>
-    <button class="btn brick block" id="reserve">Reserve for Pickup</button>
-    <p class="muted small center">Reserving holds your items. You pay each farm when you collect,
-    so Market Day never takes your card.</p>`;
+    <div class="card-row"><span class="grow">Farms</span><span>${money(total())}</span></div>
+    <div class="card-row"><span class="grow">Service fee
+      <span class="muted small" style="display:block">Keeps the farms paid in full</span></span>
+      <span>${money(serviceFee(total()))}</span></div>
+    <div class="card-row"><span class="grow"><strong>Total</strong></span>
+      <strong>${money(total() + serviceFee(total()))}</strong></div>
+    <button class="btn brick block" id="reserve">Reserve and pay</button>
+    <p class="muted small center">Every farm keeps their full price. Your items are held
+    the moment payment goes through, and you collect them at pickup.</p>`;
 
   paintBadge();
 }
@@ -103,38 +115,24 @@ document.getElementById("groups").addEventListener("click", async e => {
   }
 
   e.target.disabled = true;
-  e.target.textContent = "Reserving…";
+  e.target.textContent = "Opening checkout…";
 
   try {
-    // One reservation per line, so a farm can mark their own items collected
-    // without touching anybody else's. item_snapshot is what the buyer agreed to.
-    const code = Math.random().toString(36).slice(2, 7).toUpperCase();
-    for (const g of groups()) {
-      for (const l of g.lines) {
-        await addDoc(collection(db, "reservations"), {
-          listingId: l.listingId,
-          sellerId: l.sellerId,
-          buyerId: user.uid,
-          quantity: l.quantity,
-          fulfillmentMethod: l.pickupKey.split(":")[0],
-          fulfillmentSnapshot: { label: l.pickup, key: l.pickupKey },
-          itemSnapshot: {
-            title: l.title, price: l.price, unit: l.unit,
-            photoUrl: l.photoUrl, sellerName: l.sellerName
-          },
-          code,
-          status: "reserved",
-          reservedAt: serverTimestamp()
-        });
-      }
-    }
+    // The server reprices from the listings and refuses anything sold out, so a
+    // basket edited in the browser cannot buy a $7 loaf for a penny.
+    const { data } = await httpsCallable(fns, "createCheckout")({
+      lines: groups().flatMap(g => g.lines)
+        .map(l => ({ listingId: l.listingId, quantity: l.quantity }))
+    });
+    // Cleared on the way out. If they abandon Stripe, the order stays unpaid and
+    // nothing was reserved, so an empty basket is the honest state.
     clear();
-    location.href = "reserved.html?code=" + code;
+    location.href = data.url;
   } catch (err) {
     console.error(err);
     e.target.disabled = false;
-    e.target.textContent = "Reserve for Pickup";
-    alert("That did not go through. Nothing was reserved, so try again in a moment.");
+    e.target.textContent = "Reserve and pay";
+    alert(err.message || "Checkout could not open. Nothing was charged, try again.");
   }
 });
 

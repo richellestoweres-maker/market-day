@@ -13,6 +13,23 @@ These come from Texas cottage food and meat inspection law. Breaking one puts a 
 5. **Label before checkout.** A cottage food listing cannot publish without its label fields populated, and those fields render on the listing page above the reserve action.
 6. **Blocked categories.** Raw milk, home canned low acid goods, homemade ice cream and frozen treats, and cannabis derived products are not selectable. They are absent from the schema, not hidden in the UI.
 
+## Money
+
+One file decides it: `functions/pricing.js`. Never compute a total anywhere else.
+
+Sellers keep 100% of their listed price. The buyer pays a service fee of 10% plus
+30 cents, shown as a single line. The flat part exists because Stripe charges 30
+cents on every transaction regardless of size, and without matching it a single
+$7 loaf earns Market Day 18 cents.
+
+Stripe's cut comes out of Market Day's share, never the farm's.
+
+Prices are always recomputed on the server from the listings themselves. A basket
+arriving from a browser is a request, not a quote.
+
+Reservations and stock changes happen only in the payment webhook, after Stripe
+confirms. The rules forbid a browser from creating a reservation at all.
+
 ## Commitment model
 
 A no show costs almost nothing at a market, where the item resells, and

@@ -85,10 +85,9 @@ service cloud.firestore {
     match /reservations/{reservationId} {
       allow read: if signedIn() && (resource.data.buyerId == uid()
                   || resource.data.sellerId == uid() || isAdmin());
-      allow create: if signedIn() && notSuspended()
-                    && request.resource.data.buyerId == uid()
-                    && request.resource.data.status == 'reserved'
-                    && request.resource.data.quantity > 0;
+      // Created only by the payment webhook, after Stripe confirms the money.
+      // A reservation a browser could write is a reservation nobody paid for.
+      allow create: if false;
       // The buyer may cancel. The seller marks collected or no show.
       allow update: if isAdmin()
                     || (signedIn() && resource.data.buyerId == uid()
@@ -96,6 +95,14 @@ service cloud.firestore {
                     || (signedIn() && resource.data.sellerId == uid()
                         && request.resource.data.status in ['collected', 'no_show', 'cancelled_by_seller']);
       allow delete: if false;
+    }
+
+    // Orders are written only by the payment functions, which run with admin
+    // rights and bypass these rules. Nobody may write one from a browser, which
+    // is what stops anyone inventing a paid order.
+    match /orders/{orderId} {
+      allow read:  if signedIn() && (resource.data.buyerId == uid() || isAdmin());
+      allow write: if false;
     }
 
     match /markets/{marketId} {

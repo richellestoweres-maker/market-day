@@ -35,6 +35,9 @@
     <div class="card-row"><div class="grow"><h3>Documents</h3>
       <div class="muted small" id="docSummary"></div></div>
       <a class="btn ghost sm" href="verification.html">Manage</a></div>
+    <div class="card-row"><div class="grow"><h3>Getting paid</h3>
+      <div class="muted small" id="payoutSummary">Checking&hellip;</div></div>
+      <a class="btn ghost sm" href="payouts.html">Manage</a></div>
     <div class="card-row"><div class="grow"><h3>Profile and pickup</h3>
       <div class="muted small">Your photo, your story, and how buyers collect.</div></div>
       <a class="btn ghost sm" href="seller-setup.html">Edit</a></div>
@@ -62,11 +65,20 @@ if (!unlocked.length) {
     Send us a document and we will open the categories it covers.
     <a href="verification.html">Add a document</a>.</div>`;
 }
+if (!seller.payoutsEnabled) {
+  alerts.innerHTML += `<div class="notice warn"><strong>Nobody can buy from you yet.</strong>
+    Stripe needs your bank details before buyers can check out.
+    <a href="payouts.html">Set up payouts</a>, it takes about five minutes.</div>`;
+}
 if (soon.length) {
   alerts.innerHTML += `<div class="notice warn"><strong>Something expires soon.</strong>
     ${soon.map(d => `${DOC_TYPES[d.docType]?.label} on ${fmtDate(d.expiresOn)}`).join(", ")}.
     Send a new one and nothing goes offline.</div>`;
 }
+document.getElementById("payoutSummary").textContent = seller.payoutsEnabled
+  ? "Connected. Buyers can pay you."
+  : "Not set up yet, so nobody can check out with your items.";
+
 document.getElementById("docSummary").textContent = unlocked.length
   ? "Open: " + unlocked.map(c => CATEGORIES[c].label).join(", ")
   : "Nothing approved yet";
