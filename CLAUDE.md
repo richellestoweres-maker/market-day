@@ -25,6 +25,42 @@ No em dashes, and no dashes used as punctuation or separators. Use commas, perio
 
 Copy is written from the seller's or buyer's side of the screen. A seller sees "I deliver these myself", not "fulfillment_method: self_delivery".
 
+## Photography
+
+Two kinds of images, two different rules. Do not blur them.
+
+**Platform imagery is ours.** Only two surfaces: the category circles and the
+hero. Stock or licensed photography is right here, because these are navigation
+and consistency is the point. Someone tapping the Bakery circle is choosing a
+category, not buying that loaf.
+
+**Everything downstream of a seller is the seller's own photo.** No stock, no
+borrowed shots, no close enough.
+
+| Surface | Whose photo | Source |
+| --- | --- | --- |
+| Category circles | Ours | Platform library |
+| Hero | Ours | Platform library |
+| Featured Near You | Seller's | The listing photo |
+| Local Farms Near You | Seller's | The farm cover photo they upload |
+| Farm profile | Seller's | Cover plus their listing photos |
+| Market Basket | Seller's | The listing photo, as it was when the buyer added it |
+| Reservation and pack list | Seller's | Same snapshot as the basket |
+
+Three things follow from this and all three are requirements, not nice to haves:
+
+1. **A seller cannot publish without a farm cover photo.** It is collected during
+   onboarding, not bolted on later, because the farm rows are unusable without it.
+2. **A listing cannot publish without its own photo.** The upload cannot be chosen
+   from a platform library, and this is stated in the seller agreement.
+3. **The basket stores the photo, not a pointer to it.** Copy the listing's photo
+   URL into the basket item and again into the reservation. If a seller swaps the
+   photo on Friday, the buyer still sees what they actually reserved on Tuesday,
+   and so does the pack list at the booth.
+
+A buyer who reserves against one picture and collects something else has been
+misled. That is the one thing a marketplace built on trust cannot survive.
+
 ## Legal posture
 
 This platform lists and connects. It does not handle food, does not process payments in v1, and is not a delivery company. Product copy and terms should both reflect that. Do not add features that blur it without flagging the change.

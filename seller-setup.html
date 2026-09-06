@@ -41,6 +41,13 @@
         <textarea id="bio" maxlength="400" placeholder="Sourdough and cinnamon rolls, baked Friday night for Saturday morning."></textarea>
       </div>
       <div class="field">
+        <label class="lab" for="cover">A photo of your farm, stall or kitchen</label>
+        <div class="hint">Buyers see this first, before any of your products. Your own photo, not one from the internet.</div>
+        <input id="cover" type="file" accept="image/*">
+        <img id="coverPreview" alt="" hidden
+             style="margin-top:10px;width:100%;max-height:200px;object-fit:cover;border-radius:14px">
+      </div>
+      <div class="field">
         <label class="lab" for="town">Town</label>
         <input id="town" type="text" required maxlength="60" placeholder="Where you are based">
       </div>
@@ -60,6 +67,9 @@ import { requireSession, toast } from "./session.js";
 import { SELLER_TYPES } from "./catalog.js";
 import { doc, setDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { storage } from "./firebase.js";
+import { ref, uploadBytes, getDownloadURL }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-storage.js";
 
 const chosen = new Set();
 const { user, seller } = await requireSession();
@@ -84,6 +94,10 @@ if (seller) {
   displayName.value = seller.displayName || "";
   bio.value = seller.bio || "";
   town.value = seller.town || "";
+  if (seller.coverPhotoUrl) {
+    coverPreview.src = seller.coverPhotoUrl;
+    coverPreview.hidden = false;
+  }
   (seller.claimedTypes || []).forEach(t => {
     chosen.add(t);
     const i = Object.keys(SELLER_TYPES).indexOf(t);
@@ -94,6 +108,14 @@ if (seller) {
 document.getElementById("loading").hidden = true;
 document.getElementById("form").hidden = false;
 
+// Show them the photo they picked, so a sideways or dark shot is obvious now.
+document.getElementById("cover").addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  coverPreview.src = URL.createObjectURL(file);
+  coverPreview.hidden = false;
+});
+
 document.getElementById("form").addEventListener("submit", async e => {
   e.preventDefault();
   if (!chosen.size) return toast("Pick at least one thing you sell.");
@@ -102,12 +124,23 @@ document.getElementById("form").addEventListener("submit", async e => {
   btn.disabled = true;
 
   try {
+    // Their own photo of their own place. Platform art is only ever used on the
+    // category circles and the hero, never to stand in for a seller.
+    let coverPhotoUrl = seller?.coverPhotoUrl || null;
+    const file = document.getElementById("cover").files[0];
+    if (file) {
+      const path = `covers/${user.uid}/${Date.now()}-${file.name}`;
+      await uploadBytes(ref(storage, path), file);
+      coverPhotoUrl = await getDownloadURL(ref(storage, path));
+    }
+
     // claimedTypes is what they say. verifiedTypes and unlockedCategories are
     // written only after a document is approved, never by the seller.
     await setDoc(doc(db, "sellers", user.uid), {
       displayName: displayName.value.trim(),
       bio: bio.value.trim(),
       town: town.value.trim(),
+      coverPhotoUrl,
       claimedTypes: [...chosen],
       verifiedTypes: seller?.verifiedTypes || [],
       unlockedCategories: seller?.unlockedCategories || [],
