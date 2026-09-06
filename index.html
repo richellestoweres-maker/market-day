@@ -70,7 +70,7 @@ import { db } from "./firebase.js";
 import { money, escapeHtml } from "./chrome.js";
 import { add, paintBadge } from "./basket.js";
 import { CATEGORIES } from "./catalog.js";
-import { collection, query, where, orderBy, limit, getDocs, doc, getDoc }
+import { collection, query, where, limit, getDocs, doc, getDoc }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 document.getElementById("search").addEventListener("submit", e => {
@@ -80,17 +80,21 @@ document.getElementById("search").addEventListener("submit", e => {
 });
 
 // --- category rail. Platform art, ours, from img/. -------------------------
+// Eight circles, matching the brand board. Farm Boxes is a way of buying rather
+// than a category, so it searches instead of filtering.
 const RAIL = [
-  ["produce","Produce"], ["meat","Meat"], ["eggs","Eggs"], ["baked","Bakery"],
-  ["honey_comb","Honey"], ["flowers","Flowers"], ["dairy","Dairy"], ["preserves","Preserves"]
+  ["produce","Produce","produce"], ["meat","Meat","meat"],
+  ["eggs","Eggs","eggs"], ["baked","Bakery","bakery"],
+  ["honey_comb","Honey","honey"], ["flowers","Flowers","flowers"],
+  ["dairy","Dairy","dairy"], ["__box","Farm Boxes","farmbox"]
 ];
-const CAT_IMG = { produce:"produce", meat:"meat", eggs:"eggs", baked:"bakery",
-  honey_comb:"honey", flowers:"flowers", dairy:"dairy", preserves:"preserves" };
 
-document.getElementById("rail").innerHTML = RAIL.map(([key, label]) => `
-  <a class="cat" href="explore.html?category=${key}">
-    <span class="disc" style="background-image:url(img/cat-${CAT_IMG[key]}.jpg)"></span>${label}
-  </a>`).join("");
+document.getElementById("rail").innerHTML = RAIL.map(([key, label, img]) => {
+  const href = key === "__box" ? "explore.html?q=box" : `explore.html?category=${key}`;
+  return `<a class="cat" href="${href}">
+    <span class="disc" style="background-image:url(img/cat-${img}.jpg)"></span>${label}
+  </a>`;
+}).join("");
 
 // --- featured listings. Seller photos only. -------------------------------
 const sellerCache = new Map();
@@ -103,14 +107,20 @@ async function getSeller(id) {
 }
 
 try {
+  // Equality filter only. Adding orderBy here would need a composite index,
+  // which is a manual step in the console and a confusing failure until someone
+  // does it. Ten items sort fine in the page.
   const q = query(collection(db, "listings"),
-    where("status", "==", "published"),
-    orderBy("createdAt", "desc"), limit(10));
-  const listings = (await getDocs(q)).docs.map(d => ({ id: d.id, ...d.data() }));
+    where("status", "==", "published"), limit(24));
+  const listings = (await getDocs(q)).docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+    .slice(0, 10);
 
   const box = document.getElementById("featured");
   if (!listings.length) {
-    box.outerHTML = `<div class="empty">Nothing listed yet. The first farms are being verified now.</div>`;
+    box.outerHTML = `<div class="empty">No listings yet. The first farms are being verified now.<br>
+      <a class="btn sm" style="margin-top:14px" href="seller-setup.html">Sell on Market Day</a></div>`;
   } else {
     box.innerHTML = (await Promise.all(listings.map(async l => {
       const s = await getSeller(l.sellerId);
@@ -159,7 +169,8 @@ try {
       </span>
       <span class="badge ok">Verified</span>
     </a>`).join("")
-    : `<div class="empty">No farms have finished verification yet.</div>`;
+    : `<div class="empty">No farms have finished verification yet.<br>
+       <a class="btn sm" style="margin-top:14px" href="seller-setup.html">Be the first</a></div>`;
 } catch (err) {
   console.error(err);
   document.getElementById("farms").innerHTML =
