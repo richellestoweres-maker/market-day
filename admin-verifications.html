@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review queue · Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="admin-dashboard.html" class="back-link">&larr;</a>
+  <div class="topbar-center">
+    <div class="eyebrow">Admin</div>
+    <h1 class="page-title">Review queue</h1>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="loading" class="spinner">Loading&hellip;</div>
+  <div id="queue" hidden></div>
+</main>
+
+<script type="module">
+import { db } from "./firebase.js";
+import { requireSession, toast, fmtDate } from "./session.js";
+import { DOC_TYPES, SELLER_TYPES, CATEGORIES, unlockedCategories } from "./catalog.js";
+import { collection, query, where, orderBy, getDocs, doc, getDoc, updateDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+const { user } = await requireSession({ require: "admin" });
+
+const q = query(collection(db, "verifications"), where("status", "==", "pending"), orderBy("createdAt"));
+const pending = (await getDocs(q)).docs.map(d => ({ id: d.id, ...d.data() }));
+
+const box = document.getElementById("queue");
+
+if (!pending.length) {
+  box.innerHTML = `<div class="empty">Nothing waiting. Good place to be.</div>`;
+} else {
+  box.innerHTML = `<p class="muted small">${pending.length} document${pending.length > 1 ? "s" : ""} waiting.</p>`
+    + pending.map(card).join("");
+}
+
+function card(d) {
+  return `<div class="card" id="v-${d.id}">
+    <div class="card-row">
+      <div class="grow">
+        <h3>${d.sellerName || "Seller"}</h3>
+        <div class="muted small">${DOC_TYPES[d.docType]?.label || d.docType} · sent ${fmtDate(d.createdAt)}
+        ${d.expiresOn ? ` · expires ${fmtDate(d.expiresOn)}` : ""}</div>
+      </div>
+      <span class="badge pending">In review</span>
+    </div>
+    <div class="card-row">
+      <div class="grow">
+        <a class="btn ghost sm" href="${d.fileUrl}" target="_blank" rel="noopener">Open the document</a>
+      </div>
+    </div>
+    <div class="card-row">
+      <div class="grow">
+        <label class="lab" for="note-${d.id}">Note to the seller</label>
+        <div class="hint">Required if you send it back. They see this word for word, so be specific about what to resend.</div>
+        <input id="note-${d.id}" type="text" maxlength="200" placeholder="The expiry date is cut off, please resend the whole card">
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <button class="btn sm" data-approve="${d.id}">Approve</button>
+          <button class="btn ghost sm" data-reject="${d.id}">Send back</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+box.addEventListener("click", async e => {
+  const approveId = e.target.dataset.approve;
+  const rejectId  = e.target.dataset.reject;
+  if (!approveId && !rejectId) return;
+
+  const id = approveId || rejectId;
+  const note = document.getElementById(`note-${id}`).value.trim();
+  if (rejectId && !note) return toast("Tell them what to fix before sending it back.");
+
+  e.target.disabled = true;
+
+  try {
+    await updateDoc(doc(db, "verifications", id), {
+      status: approveId ? "approved" : "rejected",
+      notes: note || null,
+      reviewedBy: user.uid,
+      reviewedAt: serverTimestamp()
+    });
+
+    // Approving a document can open new categories, so recompute the seller's
+    // unlocks from all of their documents. Never trust a stored value here.
+    if (approveId) await recomputeUnlocks(pending.find(p => p.id === id).sellerId);
+
+    document.getElementById(`v-${id}`).remove();
+    toast(approveId ? "Approved. Their categories are open." : "Sent back with your note.");
+  } catch (err) {
+    console.error(err);
+    toast("That did not save. Try again.");
+    e.target.disabled = false;
+  }
+});
+
+/** Recompute from scratch. The same function the nightly expiry job should call. */
+async function recomputeUnlocks(sellerId) {
+  const docsQ = query(collection(db, "verifications"), where("sellerId", "==", sellerId));
+  const all = (await getDocs(docsQ)).docs.map(d => d.data());
+  const unlocked = unlockedCategories(all);
+
+  const live = all.filter(d => d.status === "approved" && (!d.expiresOn || new Date(d.expiresOn) > new Date()));
+  const held = new Set(live.map(d => d.docType));
+  const verifiedTypes = [];
+  if (held.has("grower_attestation")) verifiedTypes.push("grower");
+  if (held.has("food_handler_certificate") && held.has("cottage_food_attestation")) verifiedTypes.push("cottage_food");
+  if (held.has("establishment_permit")) verifiedTypes.push("permitted_establishment");
+  if (held.has("inspection_grant")) verifiedTypes.push("meat_producer");
+
+  await updateDoc(doc(db, "sellers", sellerId), {
+    unlockedCategories: unlocked,
+    verifiedTypes,
+    status: unlocked.length ? "verified" : "unverified",
+    updatedAt: serverTimestamp()
+  });
+}
+
+document.getElementById("loading").hidden = true;
+box.hidden = false;
+</script>
+</body>
+</html>

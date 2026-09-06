@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Start selling · Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="index.html" class="back-link">&larr;</a>
+  <div class="topbar-center">
+    <div class="eyebrow">Sellers</div>
+    <h1 class="page-title">Start selling</h1>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="loading" class="spinner">Loading&hellip;</div>
+
+  <form id="form" hidden>
+    <div class="card">
+      <h3>What do you sell?</h3>
+      <p class="muted small">Pick everything that applies. This decides which documents we ask you for next, and nothing goes live until those are approved.</p>
+      <div class="tiles" id="types"></div>
+    </div>
+
+    <div class="card">
+      <h3>Your storefront</h3>
+      <div class="field">
+        <label class="lab" for="displayName">Name buyers will see</label>
+        <input id="displayName" type="text" required maxlength="60" placeholder="Hannah's Kitchen">
+      </div>
+      <div class="field">
+        <label class="lab" for="bio">A line or two about you</label>
+        <div class="hint">What you make, how long you have been at it, anything a neighbor would want to know.</div>
+        <textarea id="bio" maxlength="400" placeholder="Sourdough and cinnamon rolls, baked Friday night for Saturday morning."></textarea>
+      </div>
+      <div class="field">
+        <label class="lab" for="town">Town</label>
+        <input id="town" type="text" required maxlength="60" placeholder="Where you are based">
+      </div>
+    </div>
+
+    <div class="notice warn">
+      You can build your storefront now, but listings stay hidden until your documents are approved. That is what makes Market Day different from a buy and sell group, and it protects you as much as your buyers.
+    </div>
+
+    <button class="btn block" id="submit" type="submit">Continue to documents</button>
+  </form>
+</main>
+
+<script type="module">
+import { db } from "./firebase.js";
+import { requireSession, toast } from "./session.js";
+import { SELLER_TYPES } from "./catalog.js";
+import { doc, setDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+const chosen = new Set();
+const { user, seller } = await requireSession();
+
+// Render the seller type tiles.
+const wrap = document.getElementById("types");
+Object.entries(SELLER_TYPES).forEach(([key, def]) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "tile";
+  b.setAttribute("aria-pressed", "false");
+  b.innerHTML = `<span class="t-label">${def.label}</span><span class="t-blurb">${def.blurb}</span>`;
+  b.onclick = () => {
+    chosen.has(key) ? chosen.delete(key) : chosen.add(key);
+    b.setAttribute("aria-pressed", chosen.has(key));
+  };
+  wrap.appendChild(b);
+});
+
+// Prefill if they are coming back to edit.
+if (seller) {
+  displayName.value = seller.displayName || "";
+  bio.value = seller.bio || "";
+  town.value = seller.town || "";
+  (seller.claimedTypes || []).forEach(t => {
+    chosen.add(t);
+    const i = Object.keys(SELLER_TYPES).indexOf(t);
+    if (i > -1) wrap.children[i].setAttribute("aria-pressed", "true");
+  });
+}
+
+document.getElementById("loading").hidden = true;
+document.getElementById("form").hidden = false;
+
+document.getElementById("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!chosen.size) return toast("Pick at least one thing you sell.");
+
+  const btn = document.getElementById("submit");
+  btn.disabled = true;
+
+  try {
+    // claimedTypes is what they say. verifiedTypes and unlockedCategories are
+    // written only after a document is approved, never by the seller.
+    await setDoc(doc(db, "sellers", user.uid), {
+      displayName: displayName.value.trim(),
+      bio: bio.value.trim(),
+      town: town.value.trim(),
+      claimedTypes: [...chosen],
+      verifiedTypes: seller?.verifiedTypes || [],
+      unlockedCategories: seller?.unlockedCategories || [],
+      status: seller?.status || "unverified",
+      updatedAt: serverTimestamp(),
+      createdAt: seller?.createdAt || serverTimestamp()
+    }, { merge: true });
+
+    location.href = "verification.html";
+  } catch (err) {
+    console.error(err);
+    toast("Could not save that. Try again.");
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

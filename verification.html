@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your documents · Market Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="seller-dashboard.html" class="back-link">&larr;</a>
+  <div class="topbar-center">
+    <div class="eyebrow">Sellers</div>
+    <h1 class="page-title">Your documents</h1>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="loading" class="spinner">Loading&hellip;</div>
+
+  <div id="content" hidden>
+    <div id="alerts"></div>
+
+    <h2>What you can sell right now</h2>
+    <div class="card" id="categories"></div>
+
+    <h2>Your documents</h2>
+    <div class="card" id="docs"></div>
+
+    <h2>Add a document</h2>
+    <div class="card">
+      <form id="upload">
+        <div class="field">
+          <label class="lab" for="docType">Which document</label>
+          <select id="docType" required>
+            <option value="">Choose one</option>
+          </select>
+          <div class="hint" id="docHint"></div>
+        </div>
+        <div class="field" id="expiryField" hidden>
+          <label class="lab" for="expiresOn">Expires on</label>
+          <div class="hint">We will remind you a month ahead. If it lapses, your listings hide until you send a new one.</div>
+          <input id="expiresOn" type="date">
+        </div>
+        <div class="field">
+          <label class="lab" for="file">Photo or PDF</label>
+          <div class="hint">A clear phone photo is fine.</div>
+          <input id="file" type="file" accept="image/*,application/pdf" required>
+        </div>
+        <button class="btn block" id="send" type="submit">Send for review</button>
+      </form>
+    </div>
+
+    <p class="muted small center">Documents are visible only to you and to Market Day staff reviewing them.</p>
+  </div>
+</main>
+
+<script type="module">
+import { db, storage } from "./firebase.js";
+import { requireSession, toast, fmtDate } from "./session.js";
+import { DOC_TYPES, CATEGORIES, BLOCKED_CATEGORIES, unlockedCategories, missingFor, expiringSoon }
+  from "./catalog.js";
+import { collection, addDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { ref, uploadBytes, getDownloadURL }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-storage.js";
+
+const { user, seller, verifications } = await requireSession({ require: "seller" });
+const now = new Date();
+
+// --- alerts ---------------------------------------------------------------
+const alerts = document.getElementById("alerts");
+const soon = expiringSoon(verifications, 30, now);
+if (soon.length) {
+  alerts.innerHTML = `<div class="notice warn"><strong>Something is about to expire.</strong>
+    ${soon.map(d => `${DOC_TYPES[d.docType]?.label || d.docType} expires ${fmtDate(d.expiresOn)}.`).join(" ")}
+    Send a new one before then and nothing goes offline.</div>`;
+}
+const rejected = verifications.filter(d => d.status === "rejected");
+if (rejected.length) {
+  alerts.innerHTML += `<div class="notice bad"><strong>One document came back.</strong>
+    ${rejected.map(d => `${DOC_TYPES[d.docType]?.label || d.docType}: ${d.notes || "please send a clearer copy"}.`).join(" ")}</div>`;
+}
+
+// --- what is unlocked -----------------------------------------------------
+const unlocked = unlockedCategories(verifications, now);
+const catBox = document.getElementById("categories");
+
+catBox.innerHTML = Object.entries(CATEGORIES).map(([key, def]) => {
+  const open = unlocked.includes(key);
+  const gap = open ? null : missingFor(key, verifications, now);
+  return `<div class="card-row">
+    <div class="grow">
+      <h3>${def.label}</h3>
+      <div class="muted small">${open
+        ? "You can list these now."
+        : gap ? `Needs your ${gap.join(" and ")}.`
+              : "Not available for the types of selling you signed up for."}</div>
+    </div>
+    <span class="badge ${open ? "ok" : "pending"}">${open ? "Open" : "Locked"}</span>
+  </div>`;
+}).join("");
+
+catBox.innerHTML += `<div class="card-row"><div class="grow">
+  <h3 class="muted">Not on Market Day at all</h3>
+  <div class="muted small">${Object.values(BLOCKED_CATEGORIES).join(" ")}</div>
+</div></div>`;
+
+// --- documents on file ----------------------------------------------------
+const docsBox = document.getElementById("docs");
+const STATUS = {
+  approved: ["ok", "Approved"], pending: ["pending", "In review"],
+  rejected: ["bad", "Needs another look"], expired: ["bad", "Expired"]
+};
+
+docsBox.innerHTML = verifications.length ? verifications.map(d => {
+  const lapsed = d.status === "approved" && d.expiresOn && new Date(d.expiresOn) <= now;
+  const [cls, text] = STATUS[lapsed ? "expired" : d.status] || ["info", d.status];
+  return `<div class="card-row">
+    <div class="grow">
+      <h3>${DOC_TYPES[d.docType]?.label || d.docType}</h3>
+      <div class="muted small">
+        Sent ${fmtDate(d.createdAt)}${d.expiresOn ? ` · expires ${fmtDate(d.expiresOn)}` : ""}
+      </div>
+    </div>
+    <span class="badge ${cls}">${text}</span>
+  </div>`;
+}).join("") : `<div class="empty">Nothing sent yet. Add your first document below.</div>`;
+
+// --- upload form ----------------------------------------------------------
+const select = document.getElementById("docType");
+const relevant = relevantDocTypes(seller.claimedTypes || []);
+relevant.forEach(key => {
+  const o = document.createElement("option");
+  o.value = key;
+  o.textContent = DOC_TYPES[key].label;
+  select.appendChild(o);
+});
+
+select.addEventListener("change", () => {
+  const def = DOC_TYPES[select.value];
+  document.getElementById("expiryField").hidden = !def?.expires;
+  document.getElementById("expiresOn").required = !!def?.expires;
+  document.getElementById("docHint").textContent = HINTS[select.value] || "";
+});
+
+const HINTS = {
+  food_handler_certificate: "The certificate from your food handler course. Most are good for two years.",
+  cottage_food_attestation: "You confirm you make these at home and stay under the annual limit.",
+  grower_attestation: "You confirm your produce is raw and uncut, nothing processed.",
+  establishment_permit: "Your retail food establishment permit from the health department.",
+  inspection_grant: "The establishment number from the processor that handled your animals."
+};
+
+document.getElementById("upload").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = document.getElementById("send");
+  const file = document.getElementById("file").files[0];
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) return toast("That file is over 10MB. Try a photo instead.");
+
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+
+  try {
+    const path = `verifications/${user.uid}/${Date.now()}-${file.name}`;
+    await uploadBytes(ref(storage, path), file);
+    const url = await getDownloadURL(ref(storage, path));
+
+    await addDoc(collection(db, "verifications"), {
+      sellerId: user.uid,
+      sellerName: seller.displayName || "",
+      docType: select.value,
+      fileUrl: url,
+      expiresOn: document.getElementById("expiresOn").value || null,
+      status: "pending",          // only an admin may change this
+      createdAt: serverTimestamp()
+    });
+
+    toast("Sent. We will look at it shortly.");
+    setTimeout(() => location.reload(), 1200);
+  } catch (err) {
+    console.error(err);
+    toast("Upload failed. Check your connection and try again.");
+    btn.disabled = false;
+    btn.textContent = "Send for review";
+  }
+});
+
+/** Only ask for documents that match what this seller says they sell. */
+function relevantDocTypes(claimed) {
+  const map = {
+    grower: ["grower_attestation"],
+    cottage_food: ["food_handler_certificate", "cottage_food_attestation"],
+    permitted_establishment: ["establishment_permit", "food_handler_certificate"],
+    meat_producer: ["inspection_grant"]
+  };
+  const out = new Set();
+  claimed.forEach(t => (map[t] || []).forEach(d => out.add(d)));
+  return [...out];
+}
+
+document.getElementById("loading").hidden = true;
+document.getElementById("content").hidden = false;
+</script>
+</body>
+</html>

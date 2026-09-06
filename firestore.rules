@@ -1,0 +1,120 @@
+rules_version = '2';
+
+// Market Day security rules.
+// The compliance rules in catalog.js are mirrored here on purpose. The client
+// copy makes the UI honest. This copy is the one that actually holds, because a
+// determined seller can bypass a form but not these.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn()      { return request.auth != null; }
+    function uid()           { return request.auth.uid; }
+    function isAdmin()       { return signedIn() && get(/databases/$(database)/documents/users/$(uid())).data.role == 'admin'; }
+    function notSuspended()  { return get(/databases/$(database)/documents/users/$(uid())).data.suspended != true; }
+    function seller(id)      { return get(/databases/$(database)/documents/sellers/$(id)).data; }
+
+    // Categories that need a complete label before they may be published.
+    function cottageCategory(c) {
+      return c in ['baked', 'preserves', 'confections', 'dry_goods', 'coffee'];
+    }
+    // Categories that must be handed over in person.
+    function perishableCategory(c) {
+      return c in ['produce', 'prepared', 'meat', 'poultry', 'seafood'];
+    }
+
+    match /users/{userId} {
+      allow read:   if signedIn() && (uid() == userId || isAdmin());
+      allow create: if signedIn() && uid() == userId
+                    && request.resource.data.role == 'member'
+                    && request.resource.data.suspended == false;
+      // A user may edit their own profile but never their own role or suspension.
+      allow update: if isAdmin() || (signedIn() && uid() == userId
+                    && request.resource.data.role == resource.data.role
+                    && request.resource.data.suspended == resource.data.suspended);
+      allow delete: if false;
+    }
+
+    match /sellers/{sellerId} {
+      allow read: if true;
+      allow create: if signedIn() && uid() == sellerId && notSuspended()
+                    && request.resource.data.unlockedCategories.size() == 0
+                    && request.resource.data.verifiedTypes.size() == 0;
+      // unlockedCategories and verifiedTypes are derived from approved documents.
+      // Only an admin or the review function may ever change them.
+      allow update: if isAdmin() || (signedIn() && uid() == sellerId && notSuspended()
+                    && request.resource.data.unlockedCategories == resource.data.unlockedCategories
+                    && request.resource.data.verifiedTypes == resource.data.verifiedTypes);
+      allow delete: if isAdmin();
+    }
+
+    match /verifications/{docId} {
+      allow read:   if isAdmin() || (signedIn() && resource.data.sellerId == uid());
+      // A seller submits a document. They cannot approve their own.
+      allow create: if signedIn() && request.resource.data.sellerId == uid()
+                    && request.resource.data.status == 'pending';
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /listings/{listingId} {
+      allow read: if resource.data.status == 'published' || isAdmin()
+                  || (signedIn() && resource.data.sellerId == uid());
+
+      allow create, update: if signedIn() && notSuspended()
+        && request.resource.data.sellerId == uid()
+        // 1. Category gating. The seller must have earned this category.
+        && request.resource.data.category in seller(uid()).unlockedCategories
+        // 2. Perishables are handed over in person.
+        && (!perishableCategory(request.resource.data.category)
+            || request.resource.data.allowUnattended == false)
+        // 3. A home kitchen listing carries a complete label.
+        && (!cottageCategory(request.resource.data.category)
+            || (request.resource.data.label.productName is string
+                && request.resource.data.label.productName.size() > 0
+                && request.resource.data.label.businessName is string
+                && request.resource.data.label.allergens is list))
+        // 4. Only a licensed business may send employees to deliver.
+        && (request.resource.data.get('driverType', 'self_or_household') != 'own_staff'
+            || 'permitted_establishment' in seller(uid()).verifiedTypes)
+        && request.resource.data.quantityAvailable >= 0;
+
+      allow delete: if isAdmin() || (signedIn() && resource.data.sellerId == uid());
+    }
+
+    match /reservations/{reservationId} {
+      allow read: if signedIn() && (resource.data.buyerId == uid()
+                  || resource.data.sellerId == uid() || isAdmin());
+      allow create: if signedIn() && notSuspended()
+                    && request.resource.data.buyerId == uid()
+                    && request.resource.data.status == 'reserved'
+                    && request.resource.data.quantity > 0;
+      // The buyer may cancel. The seller marks collected or no show.
+      allow update: if isAdmin()
+                    || (signedIn() && resource.data.buyerId == uid()
+                        && request.resource.data.status == 'cancelled_by_buyer')
+                    || (signedIn() && resource.data.sellerId == uid()
+                        && request.resource.data.status in ['collected', 'no_show', 'cancelled_by_seller']);
+      allow delete: if false;
+    }
+
+    match /markets/{marketId} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      // Only someone who actually collected an order may review it.
+      allow create: if signedIn() && request.resource.data.buyerId == uid()
+                    && get(/databases/$(database)/documents/reservations/$(request.resource.data.reservationId)).data.status == 'collected'
+                    && get(/databases/$(database)/documents/reservations/$(request.resource.data.reservationId)).data.buyerId == uid();
+      allow update, delete: if isAdmin();
+    }
+
+    match /config/{docId} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+  }
+}
