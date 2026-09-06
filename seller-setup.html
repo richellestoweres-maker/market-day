@@ -91,12 +91,12 @@ Object.entries(SELLER_TYPES).forEach(([key, def]) => {
 
 // Prefill if they are coming back to edit.
 if (seller) {
-  displayName.value = seller.displayName || "";
-  bio.value = seller.bio || "";
-  town.value = seller.town || "";
+  document.getElementById("displayName").value = seller.displayName || "";
+  document.getElementById("bio").value = seller.bio || "";
+  document.getElementById("town").value = seller.town || "";
   if (seller.coverPhotoUrl) {
-    coverPreview.src = seller.coverPhotoUrl;
-    coverPreview.hidden = false;
+    document.getElementById("coverPreview").src = seller.coverPhotoUrl;
+    document.getElementById("coverPreview").hidden = false;
   }
   (seller.claimedTypes || []).forEach(t => {
     chosen.add(t);
@@ -112,8 +112,8 @@ document.getElementById("form").hidden = false;
 document.getElementById("cover").addEventListener("change", e => {
   const file = e.target.files[0];
   if (!file) return;
-  coverPreview.src = URL.createObjectURL(file);
-  coverPreview.hidden = false;
+  document.getElementById("coverPreview").src = URL.createObjectURL(file);
+  document.getElementById("coverPreview").hidden = false;
 });
 
 document.getElementById("form").addEventListener("submit", async e => {
@@ -142,9 +142,9 @@ document.getElementById("form").addEventListener("submit", async e => {
     // claimedTypes is what they say. verifiedTypes and unlockedCategories are
     // written only after a document is approved, never by the seller.
     await setDoc(doc(db, "sellers", user.uid), {
-      displayName: displayName.value.trim(),
-      bio: bio.value.trim(),
-      town: town.value.trim(),
+      displayName: document.getElementById("displayName").value.trim(),
+      bio: document.getElementById("bio").value.trim(),
+      town: document.getElementById("town").value.trim(),
       coverPhotoUrl,
       claimedTypes: [...chosen],
       verifiedTypes: seller?.verifiedTypes || [],

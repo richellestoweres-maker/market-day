@@ -48,15 +48,21 @@ import { createUserWithEmailAndPassword, deleteUser }
 import { doc, setDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
-document.getElementById("form").addEventListener("submit", async e => {
+// Bind elements explicitly. A bare `name` resolves to window.name, the built in
+// string, not the input, so the profile was being written with name: undefined
+// and Firestore rejected the whole document.
+const $ = id => document.getElementById(id);
+const nameEl = $("name"), emailEl = $("email"), passwordEl = $("password");
+
+$("form").addEventListener("submit", async e => {
   e.preventDefault();
-  const btn = document.getElementById("submit");
-  const err = document.getElementById("error");
+  const btn = $("submit");
+  const err = $("error");
   btn.disabled = true; err.hidden = true;
 
   let cred;
   try {
-    cred = await createUserWithEmailAndPassword(auth, email.value.trim(), password.value);
+    cred = await createUserWithEmailAndPassword(auth, emailEl.value.trim(), passwordEl.value);
   } catch (ex) {
     console.error("signup failed:", ex.code, ex.message);
     err.textContent = AUTH_MESSAGES[ex.code] || `Could not create that account (${ex.code || "unknown"}).`;
@@ -69,8 +75,8 @@ document.getElementById("form").addEventListener("submit", async e => {
     // role and suspended are fixed at creation. The rules stop anyone editing
     // their own role later, which is what keeps admin meaningful.
     await setDoc(doc(db, "users", cred.user.uid), {
-      name: name.value.trim(),
-      email: email.value.trim(),
+      name: nameEl.value.trim(),
+      email: emailEl.value.trim(),
       role: "member",
       suspended: false,
       createdAt: serverTimestamp()

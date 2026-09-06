@@ -180,14 +180,14 @@ function buildForm() {
   document.getElementById("photo").addEventListener("change", e => {
     const file = e.target.files[0];
     if (!file) return;
-    photoPreview.src = URL.createObjectURL(file);
-    photoPreview.hidden = false;
+    document.getElementById("photoPreview").src = URL.createObjectURL(file);
+    document.getElementById("photoPreview").hidden = false;
   });
 
   function drawLabel() {
     document.getElementById("labelPreview").textContent = [
-      (title.value || "PRODUCT NAME").toUpperCase(),
-      `${seller.displayName}${regNumber.value ? "  ·  reg. " + regNumber.value : ""}`,
+      (document.getElementById("title").value || "PRODUCT NAME").toUpperCase(),
+      `${seller.displayName}${document.getElementById("regNumber").value ? "  ·  reg. " + document.getElementById("regNumber").value : ""}`,
       allergens.size ? "Contains: " + [...allergens].join(", ").toUpperCase() : "Contains: none declared",
       "Made " + new Date().toISOString().slice(0, 10),
       "",
@@ -215,20 +215,20 @@ function buildForm() {
 
     const draft = {
       sellerId: user.uid,
-      title: title.value.trim(),
-      description: description.value.trim(),
+      title: document.getElementById("title").value.trim(),
+      description: document.getElementById("description").value.trim(),
       category: select.value,
-      price: Number(price.value),
-      unit: unit.value.trim(),
-      quantityAvailable: Number(quantity.value),
+      price: Number(document.getElementById("price").value),
+      unit: document.getElementById("unit").value.trim(),
+      quantityAvailable: Number(document.getElementById("quantity").value),
       temperatureControlled: requiresAttendedHandoff(select.value),
       allowUnattended: false,
       allowedFulfillment: [...chosen],
       driverType: allowedDriverTypes(seller.verifiedTypes || [])[0],
       label: CATEGORIES[select.value]?.cottage ? {
-        productName: title.value.trim(),
+        productName: document.getElementById("title").value.trim(),
         businessName: seller.displayName,
-        registrationNumber: regNumber.value.trim() || "not registered",
+        registrationNumber: document.getElementById("regNumber").value.trim() || "not registered",
         allergens: [...allergens],
         statement: REQUIRED_LABEL_STATEMENT
       } : null

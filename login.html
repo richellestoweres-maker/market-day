@@ -48,7 +48,9 @@ document.getElementById("form").addEventListener("submit", async e => {
   btn.disabled = true; err.hidden = true;
 
   try {
-    await signInWithEmailAndPassword(auth, email.value.trim(), password.value);
+    await signInWithEmailAndPassword(auth,
+      document.getElementById("email").value.trim(),
+      document.getElementById("password").value);
     location.href = sessionStorage.getItem("marketday.after_login") || "index.html";
   } catch (ex) {
     console.error("login failed:", ex.code, ex.message);
