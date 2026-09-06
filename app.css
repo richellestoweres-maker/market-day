@@ -115,26 +115,26 @@ body.has-tabbar { padding-bottom: 78px; }
    is plain cream, which is how the board's mobile screens are drawn. */
 .hero-band {
   position: relative;
-  isolation: isolate;
   overflow: hidden;
   /* full bleed to the window edge, the way the board draws it */
   width: 100vw;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
   padding: 30px 20px 34px;
-}
-.hero-band::before,
-.hero-band::after { content: ""; position: absolute; inset: 0; }
-.hero-band::before {
-  z-index: -2;
   background-color: var(--bg-deep);
   background-image: url(img/hero-market.jpg);
   background-size: cover;
   background-position: 68% 55%;
   background-repeat: no-repeat;
 }
+/* The scrim fades the photo into the cream ground so the serif stays readable.
+   Deliberately not a negative z-index layer. Those paint behind an ancestor
+   background and vanish, which is exactly what happened the first time. */
 .hero-band::after {
-  z-index: -1;
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   background: linear-gradient(
     100deg,
     var(--bg) 0%, var(--bg) 24%,
@@ -142,6 +142,8 @@ body.has-tabbar { padding-bottom: 78px; }
     rgba(247, 243, 234, .45) 55%,
     rgba(247, 243, 234, 0) 72%);
 }
+.hero-band > * { position: relative; z-index: 1; }
+
 .hero-inner { max-width: 1120px; margin: 0 auto; }
 .hero-copy { max-width: 460px; }
 
@@ -166,9 +168,11 @@ body.has-tabbar { padding-bottom: 78px; }
 }
 @media (max-width: 779px) {
   /* the board's phone screens have no hero photo, just cream */
-  .hero-band::before, .hero-band::after { display: none; }
+  .hero-band { background-image: none; }
+  .hero-band::after { display: none; }
   .hero-script { display: none; }
-  .hero-band { width: auto; margin-left: 0; margin-right: 0; padding: 26px 0 10px; }
+  .hero-band { width: auto; margin-left: 0; margin-right: 0; padding: 26px 0 10px;
+    background-color: transparent; }
 }
 
 .searchbar {
