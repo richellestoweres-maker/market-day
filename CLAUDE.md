@@ -13,6 +13,17 @@ These come from Texas cottage food and meat inspection law. Breaking one puts a 
 5. **Label before checkout.** A cottage food listing cannot publish without its label fields populated, and those fields render on the listing page above the reserve action.
 6. **Blocked categories.** Raw milk, home canned low acid goods, homemade ice cream and frozen treats, and cannabis derived products are not selectable. They are absent from the schema, not hidden in the UI.
 
+## Commitment model
+
+A no show costs almost nothing at a market, where the item resells, and
+everything away from it, where it was made for one person. Commitment matches
+what is at risk, it is not applied evenly.
+
+Stock items reserve free and cancel easily. Made to order needs a deposit and a
+seller set deadline. In version 1, made to order cannot be reserved at all, only
+enquired about, because promising a cake with nothing behind it is worse than not
+offering it. Full reasoning in docs/PLAN.md.
+
 ## Not in version 1
 
 In app payments, third party couriers, shipping, route optimization, CSA subscriptions, multiple markets, native mobile apps, vendor analytics, social feed.
