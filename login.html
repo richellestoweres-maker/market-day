@@ -51,8 +51,13 @@ document.getElementById("form").addEventListener("submit", async e => {
     await signInWithEmailAndPassword(auth, email.value.trim(), password.value);
     location.href = sessionStorage.getItem("marketday.after_login") || "index.html";
   } catch (ex) {
+    console.error("login failed:", ex.code, ex.message);
     // Never say which half was wrong, that tells someone whether an email exists.
-    err.textContent = "That email and password do not match. Try again.";
+    // The exceptions below are about reaching us at all, not about the account.
+    err.textContent =
+      ex.code === "auth/network-request-failed" ? "We could not reach the server. Check your connection."
+      : ex.code === "auth/too-many-requests"    ? "Too many attempts just now. Wait a minute and try again."
+      : "That email and password do not match. Try again.";
     err.hidden = false;
     btn.disabled = false;
   }

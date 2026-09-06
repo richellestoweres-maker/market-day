@@ -43,7 +43,7 @@ renderChrome();
 <script type="module">
 import { auth, db } from "./firebase.js";
 
-import { createUserWithEmailAndPassword }
+import { createUserWithEmailAndPassword, deleteUser }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import { doc, setDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
@@ -54,8 +54,18 @@ document.getElementById("form").addEventListener("submit", async e => {
   const err = document.getElementById("error");
   btn.disabled = true; err.hidden = true;
 
+  let cred;
   try {
-    const cred = await createUserWithEmailAndPassword(auth, email.value.trim(), password.value);
+    cred = await createUserWithEmailAndPassword(auth, email.value.trim(), password.value);
+  } catch (ex) {
+    console.error("signup failed:", ex.code, ex.message);
+    err.textContent = AUTH_MESSAGES[ex.code] || `Could not create that account (${ex.code || "unknown"}).`;
+    err.hidden = false;
+    btn.disabled = false;
+    return;
+  }
+
+  try {
     // role and suspended are fixed at creation. The rules stop anyone editing
     // their own role later, which is what keeps admin meaningful.
     await setDoc(doc(db, "users", cred.user.uid), {
@@ -67,13 +77,26 @@ document.getElementById("form").addEventListener("submit", async e => {
     });
     location.href = sessionStorage.getItem("marketday.after_login") || "index.html";
   } catch (ex) {
-    err.textContent = ex.code === "auth/email-already-in-use"
-      ? "There is already an account with that email. Try logging in."
-      : "Could not create that account. Check the email and try again.";
+    // The login exists but the profile did not save. Leaving it would block this
+    // email forever with "already in use", so undo it and let them try again.
+    console.error("profile write failed:", ex.code, ex.message);
+    try { await deleteUser(cred.user); } catch (_) {}
+    err.textContent = "Your account could not be finished saving, so nothing was created. Please try again.";
     err.hidden = false;
     btn.disabled = false;
   }
 });
+
+// Say what actually went wrong. A generic message sends people in circles.
+const AUTH_MESSAGES = {
+  "auth/email-already-in-use": "There is already an account with that email. Try logging in instead.",
+  "auth/invalid-email": "That email address does not look right. Check for a typo.",
+  "auth/weak-password": "That password is too easy to guess. Use at least 8 characters.",
+  "auth/missing-password": "Enter a password.",
+  "auth/operation-not-allowed": "Email sign up is switched off for this site. That is our problem, not yours.",
+  "auth/network-request-failed": "We could not reach the server. Check your connection and try again.",
+  "auth/too-many-requests": "Too many attempts just now. Wait a minute and try again."
+};
 </script>
 </body>
 </html>
